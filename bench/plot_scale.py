@@ -56,13 +56,13 @@ def main():
             # "bpf":      "forestgreen",
         },
         x_label="Threads",
-        y_label="Time (ms)",
+        y_label="Run time (ms)",
         xscale_log2=False,
-        fontsize=20,
-        label_fontsize=24,
-        legend_fontsize=20,
-        linewidth=3,
-        markersize=9,
+        fontsize=26,
+        label_fontsize=34,
+        legend_fontsize=24,
+        linewidth=6,
+        markersize=15,
     )
     print(f"Plot saved to {args.output}", file=sys.stderr)
 

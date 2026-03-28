@@ -96,7 +96,7 @@ def build_timeline(avgs):
     f_5b  = ("#PF\nexit",             avgs["kernel_to_user_avg_ns"],      "fault")
 
     # Handler CPU active phases
-    h_1b3 = ("Context\nswitch",      avgs["ctx_switch_to_handler_avg_ns"], "sched")
+    h_1b3 = ("Ctx\nswitch",      avgs["ctx_switch_to_handler_avg_ns"], "sched")
     h_1b4 = ("poll()\nreturn",        avgs["handler_poll_return_avg_ns"],   "syscall")
     h_2a  = ("read()\nentry",        avgs["read_entry_avg_ns"],            "syscall")
     h_2b  = ("uffd\nread",          avgs["read_work_avg_ns"],             "plumbing")
@@ -146,7 +146,7 @@ def plot_timeline(avgs, output):
 
     total = sum(p[1] for p in faulter_phases)
 
-    fig, ax = plt.subplots(figsize=(10, 3.5))
+    fig, ax = plt.subplots(figsize=(11, 3.5))
 
     lane_y = {"handler": 1.0, "faulter": 0.0}
     bar_h = 0.6
@@ -186,14 +186,24 @@ def plot_timeline(avgs, output):
                     ax.text(
                         cx, y, "sleeping" if dur > 2000 else "",
                         ha="center", va="center",
-                        fontsize=9, color="#7f8c8d", style="italic",
+                        fontsize=11, color="#7f8c8d", style="italic",
                     )
                 continue
             cx = left + dur / 2
             pct = dur / total * 100
             if pct < 1.5:
                 continue  # too narrow for a label
-            fontsize = 7.5 if pct < 5 else 8
+            if pct < 5:
+                fontsize = 7.5
+            # elif pct < 7:
+            #     fontsize = 9
+            else:
+                fontsize = 9.5
+            # Per-label overrides
+            if label == "Page alloc\n+ copy":
+                fontsize = 9.5
+            elif label in ("#PF\nenter", "#PF\nexit"):
+                fontsize = 9.5
             ax.text(
                 cx, y, label,
                 ha="center", va="center",
@@ -202,10 +212,10 @@ def plot_timeline(avgs, output):
             )
 
     label_rects(f_rects, lane_y["faulter"],
-                skip_labels={"Post-wake\ncleanup"})
+                skip_labels={"Post-wake\ncleanup", "Queue\nmsg"})
     label_rects(h_rects, lane_y["handler"],
-                skip_labels={"read()\nentry", "uffd\nread", "read()\nexit",
-                             "ioctl\nentry", "ioctl\nreturn"})
+                skip_labels={"read()\nentry", "uffd\nread",
+                             "read()\nexit", "ioctl\nentry", "ioctl\nreturn"})
 
     # --- IPI arrows ---
     # IPI #1: faulter sends IPI near end of "Wake + schedule" → handler "Context switch"
@@ -233,7 +243,7 @@ def plot_timeline(avgs, output):
         arrowprops=arrow_kw,
     )
     mid_x1 = (ipi1_src_x + ipi1_dst_x) / 2
-    ax.text(mid_x1 - 350, mid_y1, "IPI", fontsize=9, color="#2c3e50",
+    ax.text(mid_x1 - 350, mid_y1, "IPI", fontsize=11, color="#2c3e50",
             weight="bold", ha="center", va="center")
 
     # IPI #2: handler → faulter (downward)
@@ -243,7 +253,7 @@ def plot_timeline(avgs, output):
         arrowprops=arrow_kw,
     )
     mid_x2 = (ipi2_src_x + ipi2_dst_x) / 2
-    ax.text(mid_x2 + 350, mid_y1, "IPI", fontsize=9, color="#2c3e50",
+    ax.text(mid_x2 + 350, mid_y1, "IPI", fontsize=11, color="#2c3e50",
             weight="bold", ha="center", va="center")
 
     # --- Curly brace helper (quadratic Bezier "{" shape) ---
@@ -274,7 +284,7 @@ def plot_timeline(avgs, output):
             linewidth=1.2, clip_on=False,
         ))
         ax.text(mid, ytop + 0.04, label,
-                ha="center", va="bottom", fontsize=9.5, weight="bold",
+                ha="center", va="bottom", fontsize=12, weight="bold",
                 color="#2c3e50")
 
     brace_y = lane_y["handler"] + bar_h / 2 + 0.04
@@ -292,9 +302,9 @@ def plot_timeline(avgs, output):
 
     # --- Lane labels ---
     ax.text(-total * 0.01, lane_y["faulter"], "Faulting\nThread",
-            ha="right", va="center", fontsize=10, weight="bold")
+            ha="right", va="center", fontsize=12, weight="bold")
     ax.text(-total * 0.01, lane_y["handler"], "Handler\nThread",
-            ha="right", va="center", fontsize=10, weight="bold")
+            ha="right", va="center", fontsize=12, weight="bold")
 
     # --- Legend for categories ---
     # --- Compute per-category % of critical-path time ---
@@ -328,8 +338,8 @@ def plot_timeline(avgs, output):
     us_ticks = np.arange(0, total / 1000 + 1, 2)
     ax.set_xticks(us_ticks * 1000)
     ax.set_xticklabels([f"{v:.0f}" for v in us_ticks])
-    ax.set_xlabel("Time (\u00b5s)", fontsize=12)
-    ax.tick_params(axis="x", labelsize=11)
+    ax.set_xlabel("Time (\u00b5s)", fontsize=16)
+    ax.tick_params(axis="x", labelsize=16)
 
     for spine in ["top", "right", "left"]:
         ax.spines[spine].set_visible(False)
@@ -337,7 +347,7 @@ def plot_timeline(avgs, output):
     # Legend above the plot
     ax.legend(
         handles=legend_items, loc="upper center",
-        bbox_to_anchor=(0.5, 1.25), ncol=5, fontsize=9.5,
+        bbox_to_anchor=(0.5, 1.25), ncol=5, fontsize=11,
         frameon=False, handlelength=1.2, handletextpad=0.4,
         columnspacing=1.0,
     )
