@@ -448,6 +448,7 @@ def plot_grouped_bar_chart(
     error_bars: bool = True,
     ylimit: float = None,
     skip_missing: bool = True,
+    log_scale: bool = False,
 ):
     """Plot a grouped bar chart from benchmark results.
 
@@ -560,6 +561,8 @@ def plot_grouped_bar_chart(
     if title:
         ax.set_title(title, fontsize=title_fontsize)
     ax.legend(fontsize=legend_fontsize, loc=legend_loc)
+    if log_scale:
+        ax.set_yscale("log")
     if grid:
         ax.set_axisbelow(True)
         ax.grid(True, alpha=0.3, axis="y")
