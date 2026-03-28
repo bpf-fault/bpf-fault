@@ -176,6 +176,11 @@ def disable_swap():
     run(["sudo", "swapoff", "-a"])
 
 
+def online_cpu_count():
+    """Return the number of currently online CPUs."""
+    return len(os.sched_getaffinity(0))
+
+
 def disable_smt():
     run(["sudo", "sh", "-c", "echo off > /sys/devices/system/cpu/smt/control"])
 
