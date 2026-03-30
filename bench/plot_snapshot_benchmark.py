@@ -2,16 +2,18 @@
 """Plot Firecracker snapshot benchmark results.
 
 Reads a JSON file produced by run_snapshot_benchmark.py and generates:
-  - total_snapshot_time.csv     full vs live total time, avg±std per mem size
-  - downtime_comparison.csv     full vs live vs live_bpf downtime, avg±std
-  - phase_breakdown.csv         per-phase µs avg per (mode, mem_size)
-  - timeseries_<mem>mib_<mode>.png × 9   throughput + avg lat + p99 on dual y-axis
-  - throughput_during_snapshot.png        avg ops/s during snapshot window
+  - total_snapshot_time.csv           full vs live total time, avg±std per mem size
+  - downtime_comparison.csv           full vs live vs live_bpf downtime, avg±std
+  - phase_breakdown.csv               per-phase µs avg per (mode, mem_size)
+  - tail_latency_comparison.csv       freeze-window p99 latency per (mode, mem_size)
+  - timeseries_<mem>mib_<mode>.png × 9  throughput + avg lat + p99 on dual y-axis
+  - throughput_during_snapshot.png    avg M ops/s during phases 2-4 per mem size
+  - tail_latency_comparison.png       p99 latency during phases 2-4 per mem size
 
 Usage:
     python3 plot_snapshot_benchmark.py results/snapshot_benchmark_redis_light.json
     python3 plot_snapshot_benchmark.py results/snapshot_benchmark_redis_light.json \\
-        --outdir figures/
+        --outdir figures/ --log-latency
 """
 
 import argparse
@@ -55,9 +57,13 @@ MODE_COLORS = {
     "live_bpf": DEFAULT_COLORS[3],   # forestgreen
 }
 
-FONTSIZE       = 16
-LABEL_FONTSIZE = 18
+FONTSIZE        = 16
+LABEL_FONTSIZE  = 18
 LEGEND_FONTSIZE = 14
+
+# Throughput display scale: divide raw ops/s by this and use _OPS_UNIT as label
+_OPS_SCALE = 1e6
+_OPS_UNIT  = "M ops/s"
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +131,48 @@ def _smooth_with_gaps(xs, ys, window_s=0.5, gap_thresh_s=1.0):
         out_xs.append(float(xs[i]))
         out_ys.append(float(ys_s[i]))
     return out_xs, out_ys
+
+
+def _load_timeseries(ts_path: str) -> list[dict]:
+    rows = []
+    with open(ts_path, newline="") as f:
+        for r in csv.DictReader(f):
+            try:
+                rows.append({
+                    "t_rel_s":    float(r["t_rel_s"]),
+                    "throughput": float(r["throughput"]),
+                    "avg_ms":     float(r.get("avg_ms",  0) or 0),
+                    "p99_ms":     float(r.get("p99_ms",  0) or 0),
+                    "p999_ms":    float(r.get("p999_ms", 0) or 0),
+                    "failed":     int(r.get("failed",    0) or 0),
+                })
+            except (KeyError, ValueError):
+                pass
+    return rows
+
+
+def _compute_global_limits(runs: list[dict],
+                            results_dir: str) -> tuple[float, float]:
+    """Scan all referenced timeseries CSVs to compute global y-axis limits.
+
+    Returns (max_throughput_ops_s, max_lat_p99_ms) across all non-failed
+    samples in all runs, so every timeseries plot uses the same scale.
+    """
+    max_thr = 0.0
+    max_lat = 0.0
+    for run in runs:
+        ts_rel = run["results"].get("timeseries_file")
+        if not ts_rel:
+            continue
+        ts_path = os.path.join(results_dir, ts_rel)
+        if not os.path.exists(ts_path):
+            continue
+        rows = _load_timeseries(ts_path)
+        ok = [r for r in rows if not r["failed"]]
+        if ok:
+            max_thr = max(max_thr, max(r["throughput"] for r in ok))
+            max_lat = max(max_lat, max(r["p99_ms"]     for r in ok))
+    return max_thr, max_lat
 
 
 # ---------------------------------------------------------------------------
@@ -220,31 +268,20 @@ def write_phase_breakdown_csv(runs: list[dict], outdir: str,
 # 4. timeseries plots — 9 × (mem_size, mode)
 # ---------------------------------------------------------------------------
 
-def _load_timeseries(ts_path: str) -> list[dict]:
-    rows = []
-    with open(ts_path, newline="") as f:
-        for r in csv.DictReader(f):
-            try:
-                rows.append({
-                    "t_rel_s":    float(r["t_rel_s"]),
-                    "throughput": float(r["throughput"]),
-                    "avg_ms":     float(r.get("avg_ms",  0) or 0),
-                    "p99_ms":     float(r.get("p99_ms",  0) or 0),
-                    "p999_ms":    float(r.get("p999_ms", 0) or 0),
-                    "failed":     int(r.get("failed",    0) or 0),
-                })
-            except (KeyError, ValueError):
-                pass
-    return rows
-
-
 def plot_timeseries_grid(runs: list[dict], results_dir: str,
-                         outdir: str, mem_sizes: list[int]):
+                         outdir: str, mem_sizes: list[int],
+                         ylim_thr: float | None = None,
+                         ylim_lat: float | None = None,
+                         log_latency: bool = False):
     """One PNG per (mem_size, mode): throughput on left y-axis,
-    avg latency and p99 on right y-axis."""
+    avg latency and p99 on right y-axis.
+
+    ylim_thr / ylim_lat: shared upper y-axis limits (in raw units, pre-scaling)
+    for consistent cross-plot comparison. log_latency applies log scale to the
+    right axis.
+    """
     for mem in mem_sizes:
         for mode in MODE_ORDER:
-            # Pick the first iteration that has a timeseries file
             matched = [r for r in select(runs, mode=mode, mem_size_mib=mem)
                        if r["results"].get("timeseries_file")]
             if not matched:
@@ -263,13 +300,14 @@ def plot_timeseries_grid(runs: list[dict], results_dir: str,
 
             ok_rows   = [r for r in ts_rows if not r["failed"]]
             xs_ok     = [r["t_rel_s"]    for r in ok_rows]
-            ys_ok     = [r["throughput"] for r in ok_rows]
+            ys_ok     = [r["throughput"] / _OPS_SCALE for r in ok_rows]
             p99s      = [r["p99_ms"]     for r in ok_rows]
             avg_ms    = [r["avg_ms"]     for r in ok_rows]
             xs_all    = [r["t_rel_s"]    for r in ts_rows]
-            ys_all    = [0.0 if r["failed"] else r["throughput"] for r in ts_rows]
-            failed_xs = [r["t_rel_s"]    for r in ts_rows if r["failed"]]
-            failed_ys = [0.0             for r in ts_rows if r["failed"]]
+            ys_all    = [0.0 if r["failed"] else r["throughput"] / _OPS_SCALE
+                         for r in ts_rows]
+            failed_xs = [r["t_rel_s"] for r in ts_rows if r["failed"]]
+            failed_ys = [0.0          for r in ts_rows if r["failed"]]
 
             fig, ax_thr = plt.subplots(figsize=(12, 6))
             ax_lat = ax_thr.twinx()
@@ -288,8 +326,8 @@ def plot_timeseries_grid(runs: list[dict], results_dir: str,
 
             # ── latency (right) ──────────────────────────────────────────
             if xs_ok:
-                avg_sx, avg_sy   = _smooth_with_gaps(xs_ok, avg_ms, window_s=0.5)
-                p99_sx,  p99_sy  = _smooth_with_gaps(xs_ok, p99s,  window_s=0.5)
+                avg_sx, avg_sy  = _smooth_with_gaps(xs_ok, avg_ms, window_s=0.5)
+                p99_sx, p99_sy  = _smooth_with_gaps(xs_ok, p99s,   window_s=0.5)
                 ax_lat.plot(avg_sx, avg_sy, color="forestgreen",
                             linewidth=2, linestyle="--", label="avg latency")
                 ax_lat.plot(p99_sx, p99_sy, color="darkorange",
@@ -322,19 +360,27 @@ def plot_timeseries_grid(runs: list[dict], results_dir: str,
 
             # ── styling ──────────────────────────────────────────────────
             ax_thr.set_xlabel("Time (s)", fontsize=LABEL_FONTSIZE)
-            ax_thr.set_ylabel("Throughput (ops/s)", fontsize=LABEL_FONTSIZE,
+            ax_thr.set_ylabel(_OPS_UNIT, fontsize=LABEL_FONTSIZE,
                                color="steelblue")
             ax_thr.tick_params(axis="y", labelcolor="steelblue",
                                labelsize=FONTSIZE)
             ax_thr.tick_params(axis="x", labelsize=FONTSIZE)
-            ax_thr.set_ylim(bottom=0)
+            if ylim_thr is not None:
+                ax_thr.set_ylim(0, ylim_thr / _OPS_SCALE * 1.1)
+            else:
+                ax_thr.set_ylim(bottom=0)
             ax_thr.grid(True, alpha=0.3)
 
             ax_lat.set_ylabel("Latency (ms)", fontsize=LABEL_FONTSIZE,
                               color="dimgray")
             ax_lat.tick_params(axis="y", labelcolor="dimgray",
                               labelsize=FONTSIZE)
-            ax_lat.set_ylim(bottom=0)
+            if log_latency:
+                ax_lat.set_yscale("log")
+            elif ylim_lat is not None:
+                ax_lat.set_ylim(0, ylim_lat * 1.1)
+            else:
+                ax_lat.set_ylim(bottom=0)
 
             # Combined legend
             lines_thr, labels_thr = ax_thr.get_legend_handles_labels()
@@ -353,17 +399,22 @@ def plot_timeseries_grid(runs: list[dict], results_dir: str,
 
 
 # ---------------------------------------------------------------------------
-# 5. throughput_during_snapshot.png
+# 5. throughput_during_snapshot.png  (phases 2-4, freeze window)
 # ---------------------------------------------------------------------------
 
 def plot_throughput_during_snapshot(runs: list[dict], outdir: str,
                                     mem_sizes: list[int]):
-    """Grouped bar chart: baseline / full / live / live_bpf ops/s per mem size."""
+    """Grouped bar chart: baseline / live (phases 2-4) / live_bpf (phases 2-4)
+    throughput in M ops/s per mem size.
+
+    Uses freeze_window throughput (phases 2-4 only) to exclude the prepare
+    phase, which runs at full speed and would otherwise dilute the signal.
+    Full snapshot is omitted since the VM is completely paused (0 ops/s).
+    """
     series = [
-        ("baseline", "Baseline",      DEFAULT_COLORS[4]),   # mediumpurple
-        ("full",     "Full (sync)",   DEFAULT_COLORS[2]),   # firebrick
-        ("live",     "Live (UFFD)",   DEFAULT_COLORS[0]),   # steelblue
-        ("live_bpf", "Live (eBPF)",   DEFAULT_COLORS[3]),   # forestgreen
+        ("baseline", "Baseline",    DEFAULT_COLORS[4]),   # mediumpurple
+        ("live",     "Live (UFFD)", DEFAULT_COLORS[0]),   # steelblue
+        ("live_bpf", "Live (eBPF)", DEFAULT_COLORS[3]),   # forestgreen
     ]
 
     x = np.arange(len(mem_sizes))
@@ -376,17 +427,14 @@ def plot_throughput_during_snapshot(runs: list[dict], outdir: str,
         means, stds = [], []
         for mem in mem_sizes:
             if key == "baseline":
-                # baseline is the same regardless of mode; average over all modes
-                vals = []
-                for mode in MODE_ORDER:
-                    vals += result_values(runs, "throughput",
-                                          mem_size_mib=mem, mode=mode)
-                vals = [v["baseline_ops_s"] for r in select(runs, mem_size_mib=mem)
-                        if (v := r["results"].get("throughput"))]
+                vals = [v["baseline_ops_s"] / _OPS_SCALE
+                        for r in select(runs, mem_size_mib=mem)
+                        if (v := r["results"].get("throughput"))
+                        and "baseline_ops_s" in v]
             else:
-                vals = [r["results"]["throughput"]["during_ops_s"]
+                vals = [r["results"]["freeze_window"]["throughput_ops_s"] / _OPS_SCALE
                         for r in select(runs, mode=key, mem_size_mib=mem)
-                        if r["results"].get("throughput")]
+                        if r["results"].get("freeze_window", {}).get("sample_count", 0) > 0]
             mean, std = agg(vals)
             means.append(mean)
             stds.append(std)
@@ -398,7 +446,8 @@ def plot_throughput_during_snapshot(runs: list[dict], outdir: str,
     ax.set_xticks(x)
     ax.set_xticklabels([f"{m} MiB" for m in mem_sizes], fontsize=FONTSIZE)
     ax.tick_params(axis="y", labelsize=FONTSIZE)
-    ax.set_ylabel("Avg Throughput During Snapshot (ops/s)", fontsize=LABEL_FONTSIZE)
+    ax.set_ylabel(f"Avg Throughput During Snapshot ({_OPS_UNIT})",
+                  fontsize=LABEL_FONTSIZE)
     ax.legend(fontsize=LEGEND_FONTSIZE)
     ax.set_ylim(bottom=0)
     ax.set_axisbelow(True)
@@ -406,6 +455,101 @@ def plot_throughput_during_snapshot(runs: list[dict], outdir: str,
     fig.tight_layout()
 
     _savefig(fig, os.path.join(outdir, "throughput_during_snapshot.png"))
+
+
+# ---------------------------------------------------------------------------
+# 6. tail_latency_comparison.png + .csv
+# ---------------------------------------------------------------------------
+
+def write_tail_latency_csv(runs: list[dict], outdir: str,
+                           mem_sizes: list[int]):
+    """CSV of freeze-window p99 latency (µs) per mode and mem size."""
+    rows = []
+    for mem in mem_sizes:
+        row = {"mem_size_mib": mem}
+        # Baseline p99 from memtier aggregate (pre-snapshot)
+        bl_vals = [r["results"]["latency_us"]["baseline_p99"]
+                   for r in select(runs, mem_size_mib=mem)
+                   if r["results"].get("latency_us", {}).get("baseline_p99") is not None]
+        bl_mean, bl_std = agg(bl_vals)
+        row["baseline_p99_us"]     = round(bl_mean, 1)
+        row["baseline_p99_std_us"] = round(bl_std,  1)
+        # Freeze-window p99 for live and live_bpf
+        for mode in ("live", "live_bpf"):
+            vals = [r["results"]["freeze_window"]["p99_us"]
+                    for r in select(runs, mode=mode, mem_size_mib=mem)
+                    if r["results"].get("freeze_window", {}).get("sample_count", 0) > 0]
+            mean, std = agg(vals)
+            row[f"{mode}_p99_us"]     = round(mean, 1)
+            row[f"{mode}_p99_std_us"] = round(std,  1)
+        rows.append(row)
+
+    path = os.path.join(outdir, "tail_latency_comparison.csv")
+    fields = ["mem_size_mib",
+              "baseline_p99_us", "baseline_p99_std_us",
+              "live_p99_us",     "live_p99_std_us",
+              "live_bpf_p99_us", "live_bpf_p99_std_us"]
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(rows)
+    print(f"  Saved: {path}")
+
+
+def plot_tail_latency_comparison(runs: list[dict], outdir: str,
+                                 mem_sizes: list[int],
+                                 log_scale: bool = False):
+    """Grouped bar chart: p99 latency (µs) for baseline / live / live_bpf.
+
+    Uses freeze_window p99 for live modes (phases 2-4 only) to isolate the
+    degradation caused by UFFD/eBPF page faults rather than diluting with the
+    prepare phase. Full snapshot is omitted (VM is paused; latency is undefined).
+    """
+    series = [
+        ("baseline", "Baseline",    DEFAULT_COLORS[4]),
+        ("live",     "Live (UFFD)", DEFAULT_COLORS[0]),
+        ("live_bpf", "Live (eBPF)", DEFAULT_COLORS[3]),
+    ]
+
+    x = np.arange(len(mem_sizes))
+    n_series = len(series)
+    width = 0.7 / n_series
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    for si, (key, label, color) in enumerate(series):
+        means, stds = [], []
+        for mem in mem_sizes:
+            if key == "baseline":
+                vals = [r["results"]["latency_us"]["baseline_p99"]
+                        for r in select(runs, mem_size_mib=mem)
+                        if r["results"].get("latency_us", {}).get("baseline_p99") is not None]
+            else:
+                vals = [r["results"]["freeze_window"]["p99_us"]
+                        for r in select(runs, mode=key, mem_size_mib=mem)
+                        if r["results"].get("freeze_window", {}).get("sample_count", 0) > 0]
+            mean, std = agg(vals)
+            means.append(mean)
+            stds.append(std)
+
+        offset = (si - (n_series - 1) / 2) * width
+        ax.bar(x + offset, means, width=width, label=label,
+               color=color, yerr=stds, capsize=3)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{m} MiB" for m in mem_sizes], fontsize=FONTSIZE)
+    ax.tick_params(axis="y", labelsize=FONTSIZE)
+    ax.set_ylabel("p99 Latency During Snapshot (µs)", fontsize=LABEL_FONTSIZE)
+    ax.legend(fontsize=LEGEND_FONTSIZE)
+    ax.set_axisbelow(True)
+    ax.grid(True, alpha=0.3, axis="y")
+    if log_scale:
+        ax.set_yscale("log")
+    else:
+        ax.set_ylim(bottom=0)
+    fig.tight_layout()
+
+    _savefig(fig, os.path.join(outdir, "tail_latency_comparison.png"))
 
 
 # ---------------------------------------------------------------------------
@@ -422,6 +566,8 @@ def main():
                     help="Output directory for plots and CSVs")
     ap.add_argument("--mem-sizes", type=int, nargs="+",
                     default=[2048, 4096, 8192], metavar="MiB")
+    ap.add_argument("--log-latency", action="store_true",
+                    help="Use log scale for latency axes")
     args = ap.parse_args()
 
     runs = load_runs(args.json)
@@ -440,12 +586,24 @@ def main():
     write_total_time_csv(runs, args.outdir, args.mem_sizes)
     write_downtime_csv(runs, args.outdir, args.mem_sizes)
     write_phase_breakdown_csv(runs, args.outdir, args.mem_sizes)
+    write_tail_latency_csv(runs, args.outdir, args.mem_sizes)
+
+    print("\nComputing global y-axis limits for timeseries plots...")
+    ylim_thr, ylim_lat = _compute_global_limits(runs, results_dir)
+    print(f"  max throughput: {ylim_thr / _OPS_SCALE:.2f} {_OPS_UNIT}  "
+          f"max p99 latency: {ylim_lat:.2f} ms")
 
     print("\nPlotting timeseries...")
-    plot_timeseries_grid(runs, results_dir, args.outdir, args.mem_sizes)
+    plot_timeseries_grid(runs, results_dir, args.outdir, args.mem_sizes,
+                         ylim_thr=ylim_thr, ylim_lat=ylim_lat,
+                         log_latency=args.log_latency)
 
-    print("\nPlotting throughput during snapshot...")
+    print("\nPlotting throughput during snapshot (phases 2-4)...")
     plot_throughput_during_snapshot(runs, args.outdir, args.mem_sizes)
+
+    print("\nPlotting tail latency comparison (phases 2-4)...")
+    plot_tail_latency_comparison(runs, args.outdir, args.mem_sizes,
+                                 log_scale=args.log_latency)
 
     print("\nDone.")
 
