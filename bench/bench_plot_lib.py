@@ -449,6 +449,8 @@ def plot_grouped_bar_chart(
     ylimit: float = None,
     skip_missing: bool = True,
     log_scale: bool = False,
+    hlines: List[Dict] = None,
+    ylimit_top: float = None,
 ):
     """Plot a grouped bar chart from benchmark results.
 
@@ -563,11 +565,21 @@ def plot_grouped_bar_chart(
     ax.legend(fontsize=legend_fontsize, loc=legend_loc)
     if log_scale:
         ax.set_yscale("log")
+        ax.set_ylim(bottom=0.8, top=ylimit_top)
     if grid:
         ax.set_axisbelow(True)
         ax.grid(True, alpha=0.3, axis="y")
     if ylimit is not None:
         ax.set_ylim(0, ylimit)
+    if hlines:
+        for hl in hlines:
+            ax.axhline(y=hl["y"], color=hl.get("color", "gray"),
+                        linestyle=hl.get("linestyle", "--"),
+                        linewidth=hl.get("linewidth", 1.5),
+                        alpha=hl.get("alpha", 0.7),
+                        label=hl.get("label", None), zorder=10)
+        if any("label" in hl for hl in hlines):
+            ax.legend(fontsize=legend_fontsize, loc=legend_loc)
 
     fig.tight_layout()
     os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
