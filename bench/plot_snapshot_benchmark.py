@@ -97,6 +97,17 @@ def agg(vals: list[float]) -> tuple[float, float]:
     return float(a.mean()), float(a.std())
 
 
+def detect_mem_sizes(runs: list[dict]) -> list[int]:
+    mem_sizes = set()
+    for run in runs:
+        try:
+            mem_size = int(run.get("config", {}).get("mem_size_mib"))
+        except (TypeError, ValueError):
+            continue
+        mem_sizes.add(mem_size)
+    return sorted(mem_sizes)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -516,6 +527,7 @@ def plot_tail_latency_comparison(runs: list[dict], outdir: str,
     width = 0.7 / n_series
 
     fig, ax = plt.subplots(figsize=(10, 6))
+    positive_values = []
 
     for si, (key, label, color) in enumerate(series):
         means, stds = [], []
@@ -531,6 +543,8 @@ def plot_tail_latency_comparison(runs: list[dict], outdir: str,
             mean, std = agg(vals)
             means.append(mean)
             stds.append(std)
+            if mean > 0:
+                positive_values.append(mean)
 
         offset = (si - (n_series - 1) / 2) * width
         ax.bar(x + offset, means, width=width, label=label,
@@ -543,10 +557,13 @@ def plot_tail_latency_comparison(runs: list[dict], outdir: str,
     ax.legend(fontsize=LEGEND_FONTSIZE)
     ax.set_axisbelow(True)
     ax.grid(True, alpha=0.3, axis="y")
-    if log_scale:
+    if log_scale and positive_values:
         ax.set_yscale("log")
+        ax.set_ylim(bottom=min(positive_values) / 1.5)
     else:
         ax.set_ylim(bottom=0)
+        if log_scale and not positive_values:
+            print("  SKIP log scale for tail latency comparison: no positive values")
     fig.tight_layout()
 
     _savefig(fig, os.path.join(outdir, "tail_latency_comparison.png"))
@@ -565,7 +582,8 @@ def main():
     ap.add_argument("--outdir", default="figures",
                     help="Output directory for plots and CSVs")
     ap.add_argument("--mem-sizes", type=int, nargs="+",
-                    default=[2048, 4096, 8192], metavar="MiB")
+                    metavar="MiB",
+                    help="Optional explicit memory sizes to include. Default: auto-detect from the JSON.")
     ap.add_argument("--log-latency", action="store_true",
                     help="Use log scale for latency axes")
     args = ap.parse_args()
@@ -582,11 +600,17 @@ def main():
     print(f"Loaded {len(runs)} records from {args.json}")
     print(f"Output → {args.outdir}/\n")
 
+    mem_sizes = sorted(set(args.mem_sizes)) if args.mem_sizes else detect_mem_sizes(runs)
+    if not mem_sizes:
+        print("ERROR: could not determine any mem_size_mib values from the JSON", file=sys.stderr)
+        sys.exit(1)
+    print("Memory sizes:", ", ".join(str(mem) for mem in mem_sizes), "\n")
+
     print("Writing CSVs...")
-    write_total_time_csv(runs, args.outdir, args.mem_sizes)
-    write_downtime_csv(runs, args.outdir, args.mem_sizes)
-    write_phase_breakdown_csv(runs, args.outdir, args.mem_sizes)
-    write_tail_latency_csv(runs, args.outdir, args.mem_sizes)
+    write_total_time_csv(runs, args.outdir, mem_sizes)
+    write_downtime_csv(runs, args.outdir, mem_sizes)
+    write_phase_breakdown_csv(runs, args.outdir, mem_sizes)
+    write_tail_latency_csv(runs, args.outdir, mem_sizes)
 
     print("\nComputing global y-axis limits for timeseries plots...")
     ylim_thr, ylim_lat = _compute_global_limits(runs, results_dir)
@@ -594,15 +618,15 @@ def main():
           f"max p99 latency: {ylim_lat:.2f} ms")
 
     print("\nPlotting timeseries...")
-    plot_timeseries_grid(runs, results_dir, args.outdir, args.mem_sizes,
+    plot_timeseries_grid(runs, results_dir, args.outdir, mem_sizes,
                          ylim_thr=ylim_thr, ylim_lat=ylim_lat,
                          log_latency=args.log_latency)
 
     print("\nPlotting throughput during snapshot (phases 2-4)...")
-    plot_throughput_during_snapshot(runs, args.outdir, args.mem_sizes)
+    plot_throughput_during_snapshot(runs, args.outdir, mem_sizes)
 
     print("\nPlotting tail latency comparison (phases 2-4)...")
-    plot_tail_latency_comparison(runs, args.outdir, args.mem_sizes,
+    plot_tail_latency_comparison(runs, args.outdir, mem_sizes,
                                  log_scale=args.log_latency)
 
     print("\nDone.")
