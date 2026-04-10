@@ -194,7 +194,7 @@ def plot_groupped_bars(
     plt.yticks(fontsize=fontsize)
     plt.legend(fontsize=legend_fontsize, loc=legend_loc)
     plt.tight_layout()
-    plt.savefig(output, metadata={"creationDate": None})
+    plt.savefig(output, bbox_inches="tight", metadata={"creationDate": None})
     plt.clf()
 
 
@@ -317,6 +317,7 @@ def plot_line_chart(
     error_bars: bool = True,
     linewidth: float = 2.5,
     markersize: float = 7,
+    yscale_log: bool = False,
 ):
     """Plot a line chart from benchmark results.
 
@@ -402,6 +403,8 @@ def plot_line_chart(
     if grid:
         ax.set_axisbelow(True)
         ax.grid(True, alpha=0.3)
+    if yscale_log:
+        ax.set_yscale("log")
     if xscale_log2:
         ax.set_xscale("log", base=2)
         ax.set_xticks(x_values)
@@ -412,7 +415,7 @@ def plot_line_chart(
 
     fig.tight_layout()
     os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
-    fig.savefig(output, metadata={"creationDate": None})
+    fig.savefig(output, bbox_inches="tight", metadata={"creationDate": None})
     plt.close(fig)
     log.info("Plot saved to %s", output)
 
@@ -451,6 +454,8 @@ def plot_grouped_bar_chart(
     log_scale: bool = False,
     hlines: List[Dict] = None,
     ylimit_top: float = None,
+    legend_ncol: int = None,
+    legend_columnspacing: float = None,
 ):
     """Plot a grouped bar chart from benchmark results.
 
@@ -562,7 +567,12 @@ def plot_grouped_bar_chart(
     ax.set_ylabel(y_label, fontsize=label_fontsize)
     if title:
         ax.set_title(title, fontsize=title_fontsize)
-    ax.legend(fontsize=legend_fontsize, loc=legend_loc)
+    legend_kwargs = dict(fontsize=legend_fontsize, loc=legend_loc)
+    if legend_ncol:
+        legend_kwargs["ncol"] = legend_ncol
+    if legend_columnspacing is not None:
+        legend_kwargs["columnspacing"] = legend_columnspacing
+    ax.legend(**legend_kwargs)
     if log_scale:
         ax.set_yscale("log")
         ax.set_ylim(bottom=0.8, top=ylimit_top)
@@ -579,10 +589,10 @@ def plot_grouped_bar_chart(
                         alpha=hl.get("alpha", 0.7),
                         label=hl.get("label", None), zorder=10)
         if any("label" in hl for hl in hlines):
-            ax.legend(fontsize=legend_fontsize, loc=legend_loc)
+            ax.legend(**legend_kwargs)
 
     fig.tight_layout()
     os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
-    fig.savefig(output, metadata={"creationDate": None})
+    fig.savefig(output, bbox_inches="tight", metadata={"creationDate": None})
     plt.close(fig)
     log.info("Plot saved to %s", output)
