@@ -120,7 +120,9 @@ def print_table(title, groups, group_labels, combined, series_order):
 
 def plot_figure(combined, group_order, group_labels, series_order, output,
                 figsize=(10, 6), log_scale=True, hlines=None, ylimit_top=None,
-                legend_loc="best"):
+                legend_loc="best", fontsize=26, label_fontsize=32,
+                legend_fontsize=24, legend_ncol=None,
+                legend_columnspacing=None):
     """Plot one normalized grouped bar chart."""
     active_groups = [g for g in group_order
                      if any(r.config["group"] == g for r in combined)]
@@ -140,9 +142,9 @@ def plot_figure(combined, group_order, group_labels, series_order, output,
         series_labels=SERIES_LABELS,
         series_colors=SERIES_COLORS,
         y_label="Overhead (× vs glibc)",
-        fontsize=22,
-        label_fontsize=28,
-        legend_fontsize=20,
+        fontsize=fontsize,
+        label_fontsize=label_fontsize,
+        legend_fontsize=legend_fontsize,
         figsize=figsize,
         grid=False,
         error_bars=False,
@@ -150,6 +152,8 @@ def plot_figure(combined, group_order, group_labels, series_order, output,
         hlines=hlines,
         ylimit_top=ylimit_top,
         legend_loc=legend_loc,
+        legend_ncol=legend_ncol,
+        legend_columnspacing=legend_columnspacing,
     )
     print(f"Plot saved to {output}", file=sys.stderr)
 
@@ -199,8 +203,10 @@ def main():
         print_table("Microbenchmarks", micro_group_order,
                     MICRO_GROUP_LABELS, micro_combined, series_order)
         plot_figure(micro_combined, micro_group_order, MICRO_GROUP_LABELS,
-                    series_order, args.output_micro, ylimit_top=1000000,
-                    legend_loc="upper left")
+                    series_order, args.output_micro, ylimit_top=200000,
+                    legend_loc="upper left",
+                    fontsize=22, label_fontsize=32, legend_fontsize=22,
+                    legend_ncol=2, legend_columnspacing=1.0)
 
     # --- Applications (no glibc/efence — just the three efency modes) ---
     app_series = [s for s in series_order
@@ -218,8 +224,10 @@ def main():
         plot_figure(app_combined, APP_GROUPS, APP_GROUP_LABELS,
                     app_series, args.output_apps,
                     log_scale=True, ylimit_top=150,
+                    fontsize=32, label_fontsize=32, legend_fontsize=28,
                     hlines=[{"y": 1.0, "color": SERIES_COLORS["glibc"],
-                             "label": "glibc (1.0×)"}])
+                             "label": "glibc (1.0×)",
+                             "linewidth": 10, "alpha": 1.0}])
 
 
 if __name__ == "__main__":
