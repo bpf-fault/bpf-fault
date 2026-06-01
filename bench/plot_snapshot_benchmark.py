@@ -6,7 +6,9 @@ Reads a JSON file produced by run_snapshot_benchmark.py and generates:
   - downtime_comparison.csv           full vs live vs live_bpf downtime, avg±std
   - phase_breakdown.csv               per-phase µs avg per (mode, mem_size)
   - tail_latency_comparison.csv       freeze-window p99 latency per (mode, mem_size)
-  - timeseries_<mem>mib_<mode>.png × 9  throughput + avg lat + p99 on dual y-axis
+  - timeseries_<mem>mib_<mode>.png/.pdf  paper-style firecracker timeline:
+        throughput (ops/s, left) + P99 latency (ms, right), Start/End lines,
+        Downtime band
   - throughput_during_snapshot.png    avg M ops/s during phases 2-4 per mem size
   - tail_latency_comparison.png       p99 latency during phases 2-4 per mem size
 
@@ -284,13 +286,23 @@ def plot_timeseries_grid(runs: list[dict], results_dir: str,
                          ylim_thr: float | None = None,
                          ylim_lat: float | None = None,
                          log_latency: bool = False):
-    """One PNG per (mem_size, mode): throughput on left y-axis,
-    avg latency and p99 on right y-axis.
+    """One figure (PNG + PDF) per (mem_size, mode), in the bpf-fault-paper
+    firecracker-timeline style:
 
-    ylim_thr / ylim_lat: shared upper y-axis limits (in raw units, pre-scaling)
-    for consistent cross-plot comparison. log_latency applies log scale to the
-    right axis.
+      - left y-axis : Throughput (ops/s), blue solid line, K-formatted ticks
+      - right y-axis: Latency (ms), orange solid "P99 Latency" line
+      - gray solid vertical lines at snapshot Start/End
+      - red hatched span over the Downtime window (freeze for live/live_bpf,
+        the whole pause for full)
+      - legend lower-left, large fonts, no title
+
+    ylim_thr / ylim_lat: shared upper limits (raw ops/s and ms) for consistent
+    cross-plot comparison. log_latency applies a log scale to the right axis.
     """
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+    from matplotlib.ticker import FuncFormatter
+
     for mem in mem_sizes:
         for mode in MODE_ORDER:
             matched = [r for r in select(runs, mode=mode, mem_size_mib=mem)
@@ -299,114 +311,80 @@ def plot_timeseries_grid(runs: list[dict], results_dir: str,
                 print(f"  SKIP timeseries: mode={mode} mem={mem} (no file)")
                 continue
             run = matched[0]
-            ts_rel = run["results"]["timeseries_file"]
-            ts_path = os.path.join(results_dir, ts_rel)
+            ts_path = os.path.join(results_dir, run["results"]["timeseries_file"])
             if not os.path.exists(ts_path):
                 print(f"  SKIP timeseries: {ts_path} not found")
                 continue
-
             ts_rows = _load_timeseries(ts_path)
             if not ts_rows:
                 continue
 
-            ok_rows   = [r for r in ts_rows if not r["failed"]]
-            xs_ok     = [r["t_rel_s"]    for r in ok_rows]
-            ys_ok     = [r["throughput"] / _OPS_SCALE for r in ok_rows]
-            p99s      = [r["p99_ms"]     for r in ok_rows]
-            avg_ms    = [r["avg_ms"]     for r in ok_rows]
-            xs_all    = [r["t_rel_s"]    for r in ts_rows]
-            ys_all    = [0.0 if r["failed"] else r["throughput"] / _OPS_SCALE
-                         for r in ts_rows]
-            failed_xs = [r["t_rel_s"] for r in ts_rows if r["failed"]]
-            failed_ys = [0.0          for r in ts_rows if r["failed"]]
+            xs  = [r["t_rel_s"] for r in ts_rows]
+            thr = [0.0 if r["failed"] else r["throughput"] for r in ts_rows]
+            p99 = [r["p99_ms"] for r in ts_rows]
 
-            fig, ax_thr = plt.subplots(figsize=(12, 6))
+            fig, ax_thr = plt.subplots(figsize=(8, 4))
             ax_lat = ax_thr.twinx()
 
-            # ── throughput (left) ────────────────────────────────────────
-            ax_thr.scatter(xs_ok, ys_ok, s=4, color="steelblue",
-                           alpha=0.4, label="throughput raw")
-            if xs_all:
-                _, ys_s = _rolling_mean(xs_all, ys_all, window_s=0.5)
-                ax_thr.plot(xs_all, ys_s, color="steelblue",
-                            linewidth=2, label="throughput (smoothed)")
-            if failed_xs:
-                ax_thr.scatter(failed_xs, failed_ys, s=40, color="firebrick",
-                               marker="x", linewidths=1.5, zorder=5,
-                               label="connection failed")
+            # Throughput (left, blue) and P99 latency (right, orange).
+            ax_thr.plot(xs, thr, color="steelblue", linewidth=1.8,
+                        label="Throughput", zorder=3)
+            ax_lat.plot(xs, p99, color="darkorange", linewidth=1.8,
+                        label="P99 Latency", zorder=2)
 
-            # ── latency (right) ──────────────────────────────────────────
-            if xs_ok:
-                avg_sx, avg_sy  = _smooth_with_gaps(xs_ok, avg_ms, window_s=0.5)
-                p99_sx, p99_sy  = _smooth_with_gaps(xs_ok, p99s,   window_s=0.5)
-                ax_lat.plot(avg_sx, avg_sy, color="forestgreen",
-                            linewidth=2, linestyle="--", label="avg latency")
-                ax_lat.plot(p99_sx, p99_sy, color="darkorange",
-                            linewidth=2, linestyle=":",  label="p99 latency")
-                ax_lat.scatter(xs_ok, avg_ms, s=4, color="forestgreen", alpha=0.3)
-                ax_lat.scatter(xs_ok, p99s,   s=4, color="darkorange",  alpha=0.3)
-
-            # ── snapshot / freeze markers ────────────────────────────────
+            # Start/End vertical lines + Downtime band.
             res = run["results"]
             snap_s   = res.get("ts_snap_start_s",  0)
             snap_e   = res.get("ts_snap_end_s",    0)
             freeze_s = res.get("ts_freeze_start_s", 0)
             freeze_e = res.get("ts_freeze_end_s",   0)
-
             if snap_s and snap_e:
-                for ax in (ax_thr, ax_lat):
-                    ax.axvline(snap_s, color="steelblue", linestyle="--",
-                               linewidth=1, alpha=0.7)
-                    ax.axvline(snap_e, color="steelblue", linestyle="--",
-                               linewidth=1, alpha=0.7)
-                if mode == "full":
-                    for ax in (ax_thr, ax_lat):
-                        ax.axvspan(snap_s, snap_e, alpha=0.12, color="firebrick",
-                                   hatch="//", label="_nolegend_")
-                elif freeze_s and freeze_e and freeze_e > freeze_s:
-                    for ax in (ax_thr, ax_lat):
-                        ax.axvspan(freeze_s, freeze_e, alpha=0.15,
-                                   color="firebrick", hatch="//",
-                                   label="_nolegend_")
+                for x in (snap_s, snap_e):
+                    ax_thr.axvline(x, color="dimgray", linewidth=2.0, zorder=4)
+                down_s, down_e = (snap_s, snap_e) if mode == "full" \
+                    else (freeze_s, freeze_e)
+                if down_e and down_e > down_s:
+                    ax_thr.axvspan(down_s, down_e, facecolor="firebrick",
+                                   alpha=0.25, hatch="//", edgecolor="firebrick",
+                                   zorder=1)
 
-            # ── styling ──────────────────────────────────────────────────
+            # Left axis (Throughput, ops/s, K-formatted).
             ax_thr.set_xlabel("Time (s)", fontsize=LABEL_FONTSIZE)
-            ax_thr.set_ylabel(_OPS_UNIT, fontsize=LABEL_FONTSIZE,
-                               color="steelblue")
-            ax_thr.tick_params(axis="y", labelcolor="steelblue",
-                               labelsize=FONTSIZE)
-            ax_thr.tick_params(axis="x", labelsize=FONTSIZE)
-            if ylim_thr is not None:
-                ax_thr.set_ylim(0, ylim_thr / _OPS_SCALE * 1.1)
-            else:
-                ax_thr.set_ylim(bottom=0)
+            ax_thr.set_ylabel("Throughput (ops/s)", fontsize=LABEL_FONTSIZE)
+            ax_thr.yaxis.set_major_formatter(
+                FuncFormatter(lambda v, _: f"{v / 1000:.0f}K"))
+            ax_thr.set_ylim(0, (ylim_thr * 1.1) if ylim_thr else max(thr) * 1.25)
+            ax_thr.set_xlim(0, (snap_e + 1.5) if snap_e else max(xs))
+            ax_thr.tick_params(labelsize=FONTSIZE)
             ax_thr.grid(True, alpha=0.3)
 
-            ax_lat.set_ylabel("Latency (ms)", fontsize=LABEL_FONTSIZE,
-                              color="dimgray")
-            ax_lat.tick_params(axis="y", labelcolor="dimgray",
-                              labelsize=FONTSIZE)
+            # Right axis (Latency, ms).
+            ax_lat.set_ylabel("Latency (ms)", fontsize=LABEL_FONTSIZE)
             if log_latency:
                 ax_lat.set_yscale("log")
-            elif ylim_lat is not None:
-                ax_lat.set_ylim(0, ylim_lat * 1.1)
             else:
-                ax_lat.set_ylim(bottom=0)
+                ax_lat.set_ylim(0, (ylim_lat * 1.1) if ylim_lat
+                                else max(max(p99), 50.0) * 1.15)
+            ax_lat.tick_params(labelsize=FONTSIZE)
 
-            # Combined legend
-            lines_thr, labels_thr = ax_thr.get_legend_handles_labels()
-            lines_lat, labels_lat = ax_lat.get_legend_handles_labels()
-            ax_thr.legend(lines_thr + lines_lat, labels_thr + labels_lat,
-                          fontsize=LEGEND_FONTSIZE, loc="upper left")
+            # Legend with proxy artists for the markers (lower-left).
+            handles = [
+                Line2D([], [], color="steelblue", lw=1.8, label="Throughput"),
+                Line2D([], [], color="dimgray", lw=2.0, label="Start/End"),
+                Patch(facecolor="firebrick", alpha=0.25, hatch="//",
+                      edgecolor="firebrick", label="Downtime"),
+                Line2D([], [], color="darkorange", lw=1.8, label="P99 Latency"),
+            ]
+            ax_thr.legend(handles=handles, fontsize=LEGEND_FONTSIZE,
+                          loc="lower left", framealpha=0.9)
 
-            fig.suptitle(
-                f"{MODE_LABELS[mode]} — {mem} MiB",
-                fontsize=FONTSIZE + 2, fontweight="bold",
-            )
             fig.tight_layout()
-
-            fname = f"timeseries_{mem}mib_{mode}.png"
-            _savefig(fig, os.path.join(outdir, fname))
+            for ext in ("png", "pdf"):
+                fig.savefig(os.path.join(outdir, f"timeseries_{mem}mib_{mode}.{ext}"),
+                            dpi=150, bbox_inches="tight",
+                            metadata={"creationDate": None})
+            plt.close(fig)
+            print(f"  Saved: timeseries_{mem}mib_{mode}.png/.pdf")
 
 
 # ---------------------------------------------------------------------------
