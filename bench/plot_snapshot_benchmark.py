@@ -33,6 +33,12 @@ import matplotlib.pyplot as plt
 plt.rcParams["pdf.fonttype"] = 42
 plt.rcParams["ps.fonttype"]  = 42
 
+# Shared helpers — defined in benchplot.py, imported here to avoid duplication
+_BENCH_DIR = os.path.dirname(os.path.abspath(__file__))
+if _BENCH_DIR not in sys.path:
+    sys.path.insert(0, _BENCH_DIR)
+from benchplot import _rolling_mean, _smooth_with_gaps  # noqa: E402
+
 # bpf-fault default colour palette
 DEFAULT_COLORS = [
     "steelblue",
@@ -119,31 +125,6 @@ def _savefig(fig, path: str):
     fig.savefig(path, dpi=150, bbox_inches="tight", metadata={"creationDate": None})
     plt.close(fig)
     print(f"  Saved: {path}")
-
-
-def _rolling_mean(xs, ys, window_s=0.5):
-    xs = np.array(xs, dtype=float)
-    ys = np.array(ys, dtype=float)
-    out = np.empty_like(ys)
-    half = window_s / 2
-    for i, t in enumerate(xs):
-        mask = (xs >= t - half) & (xs <= t + half)
-        out[i] = ys[mask].mean() if mask.any() else ys[i]
-    return xs, out
-
-
-def _smooth_with_gaps(xs, ys, window_s=0.5, gap_thresh_s=1.0):
-    if not xs:
-        return [], []
-    _, ys_s = _rolling_mean(xs, ys, window_s=window_s)
-    out_xs, out_ys = [xs[0]], [ys_s[0]]
-    for i in range(1, len(xs)):
-        if xs[i] - xs[i - 1] > gap_thresh_s:
-            out_xs.append(float("nan"))
-            out_ys.append(float("nan"))
-        out_xs.append(float(xs[i]))
-        out_ys.append(float(ys_s[i]))
-    return out_xs, out_ys
 
 
 def _load_timeseries(ts_path: str) -> list[dict]:
