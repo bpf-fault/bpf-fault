@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot efency real-application benchmark results: wall time by app and mode.
 #
 # Usage:
@@ -18,7 +16,7 @@ from bench_lib import BenchResults, BenchRun, parse_results_file
 from bench_plot_lib import plot_grouped_bar_chart, results_select
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_INPUT = os.path.join(SCRIPT_DIR, "../../efency/results/app_results.json")
+DEFAULT_INPUT = os.path.join(SCRIPT_DIR, "../results/efency/app_results.json")
 DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "../figures/efency_apps.pdf")
 
 SERIES_ORDER = ["glibc", "efence", "efency_sigbus", "efency_handler", "ebpfency"]

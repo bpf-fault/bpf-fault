@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot baseline anonymous fault overhead as a single-lane timeline.
 # Supports both read-fault (zero-page) and write-fault (page alloc) modes.
 #

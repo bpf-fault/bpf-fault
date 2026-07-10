@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot dynamic linking microbenchmarks: synthetic no-touch (4K, 100K, 1M)
 # and dlopen no-access (1M).
 #
@@ -17,7 +15,7 @@ from bench_lib import BenchResults, BenchRun
 from bench_plot_lib import plot_grouped_bar_chart
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(SCRIPT_DIR, "results/dynlink")
+RESULTS_DIR = os.path.join(SCRIPT_DIR, "../results/dynlink")
 DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "../figures/dynlink_micro.pdf")
 
 

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot bpf_fault overhead as a single-lane timeline.
 #
 # Usage:

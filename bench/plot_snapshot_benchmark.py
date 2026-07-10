@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
-"""Plot Firecracker snapshot benchmark results.
-
-Reads a JSON file produced by run_snapshot_benchmark.py and generates:
-  - total_snapshot_time.csv           full vs live total time, avg±std per mem size
-  - downtime_comparison.csv           full vs live vs live_bpf downtime, avg±std
-  - phase_breakdown.csv               per-phase µs avg per (mode, mem_size)
-  - tail_latency_comparison.csv       freeze-window p99 latency per (mode, mem_size)
-  - timeseries_<mem>mib_<mode>.png/.pdf  paper-style firecracker timeline:
-        throughput (ops/s, left) + P99 latency (ms, right), Start/End lines,
-        Downtime band
-  - throughput_during_snapshot.png    avg M ops/s during phases 2-4 per mem size
-  - tail_latency_comparison.png       p99 latency during phases 2-4 per mem size
-
-Usage:
-    python3 plot_snapshot_benchmark.py results/snapshot_benchmark_redis_light.json
-    python3 plot_snapshot_benchmark.py results/snapshot_benchmark_redis_light.json \\
-        --outdir figures/ --log-latency
-"""
+# Plot Firecracker snapshot benchmark results.
+#
+# Reads a JSON file produced by run_snapshot_benchmark.py and generates:
+#   - total_snapshot_time.csv           full vs live total time, avg±std per mem size
+#   - downtime_comparison.csv           full vs live vs live_bpf downtime, avg±std
+#   - phase_breakdown.csv               per-phase µs avg per (mode, mem_size)
+#   - tail_latency_comparison.csv       freeze-window p99 latency per (mode, mem_size)
+#   - timeseries_<mem>mib_<mode>.png/.pdf  paper-style firecracker timeline:
+#         throughput (ops/s, left) + P99 latency (ms, right), Start/End lines,
+#         Downtime band
+#   - throughput_during_snapshot.png    avg M ops/s during phases 2-4 per mem size
+#   - tail_latency_comparison.png       p99 latency during phases 2-4 per mem size
+#
+# Usage:
+#   python3 plot_snapshot_benchmark.py results/snapshot_benchmark_redis_light.json
+#   python3 plot_snapshot_benchmark.py results/snapshot_benchmark_redis_light.json \
+#       --outdir figures/ --log-latency
 
 import argparse
 import csv
@@ -103,6 +102,13 @@ def agg(vals: list[float]) -> tuple[float, float]:
         return 0.0, 0.0
     a = np.array(vals, dtype=float)
     return float(a.mean()), float(a.std())
+
+
+def mem_label(mem_mib: int) -> str:
+    """Human-readable memory size label: 4096 -> '4 GB'."""
+    if mem_mib % 1024 == 0:
+        return f"{mem_mib // 1024} GB"
+    return f"{mem_mib} MiB"
 
 
 def detect_mem_sizes(runs: list[dict]) -> list[int]:

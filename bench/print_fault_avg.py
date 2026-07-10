@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Print average and p99 latency for each workload in fault results,
 # averaged across rounds.
 #

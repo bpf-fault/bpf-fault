@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot userfaultfd overhead as a two-lane (faulting thread / handler thread)
 # timeline with IPI arrows between them.
 #

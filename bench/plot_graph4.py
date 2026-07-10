@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
-"""Graph 4: combined Firecracker + QEMU snapshot benchmark bar chart.
-
-Outputs:
-  results/graph4_throughput.png  — avg throughput (M ops/s) per config
-  results/graph4_latency.png     — avg latency (µs) per config
-
-X-axis groups (with a gap between workloads):
-  FC 8192 MiB | QEMU 16384 MiB  ||  FC 8192 MiB | QEMU 16384 MiB
-        Redis                              Memcached
-
-4 bars per group:
-  Baseline    — pooled across all 3 modes (9 samples)
-  Synchronous — full mode (3 samples)
-  Async UFFD  — live mode (3 samples)
-  Async eBPF  — live_bpf mode (3 samples)
-
-Usage (zero-arg from bench/):
-    python3 plot_graph4.py
-
-Optional overrides:
-    python3 plot_graph4.py --fc-mem 4096 --out-dir /tmp/
-"""
+# Graph 4: combined Firecracker + QEMU snapshot benchmark bar chart.
+#
+# Outputs:
+#   results/graph4_throughput.png  — avg throughput (M ops/s) per config
+#   results/graph4_latency.png     — avg latency (µs) per config
+#
+# X-axis groups (with a gap between workloads):
+#   FC 8192 MiB | QEMU 16384 MiB  ||  FC 8192 MiB | QEMU 16384 MiB
+#         Redis                              Memcached
+#
+# 4 bars per group:
+#   Baseline    — pooled across all 3 modes (9 samples)
+#   Synchronous — full mode (3 samples)
+#   Async UFFD  — live mode (3 samples)
+#   Async eBPF  — live_bpf mode (3 samples)
+#
+# Usage (zero-arg from bench/):
+#   python3 plot_graph4.py
+#
+# Optional overrides:
+#   python3 plot_graph4.py --fc-mem 4096 --out-dir /tmp/
 
 import argparse
 import os
@@ -42,6 +41,7 @@ from plot_snapshot_benchmark import (  # noqa: E402
     _savefig,
     agg,
     load_runs,
+    mem_label,
     select,
 )
 
@@ -87,27 +87,31 @@ _HYPERVISORS = [
 # ---------------------------------------------------------------------------
 
 def load_all_runs(results_dir: str, workload_map: list,
-                  fc_mem: int) -> list[dict]:
+                  fc_mem, include_qemu: bool = True) -> list[dict]:
     """Load and tag runs from FC and QEMU JSON files.
 
     Tags each run in-place with:
       config["hypervisor"]     — "fc" or "qemu"
       config["workload_label"] — human-readable label (e.g. "Redis")
 
-    FC runs are filtered to fc_mem only; QEMU runs are kept as-is.
+    FC runs are filtered to fc_mem (an int or a list of ints); QEMU runs
+    are kept as-is.
     """
+    fc_mems = fc_mem if isinstance(fc_mem, list) else [fc_mem]
     all_runs: list[dict] = []
     for wl_label, fc_file, qemu_file in workload_map:
         fc_path = os.path.join(results_dir, fc_file)
         if os.path.exists(fc_path):
             for r in load_runs(fc_path):
-                if r["config"].get("mem_size_mib") == fc_mem:
+                if r["config"].get("mem_size_mib") in fc_mems:
                     r["config"]["hypervisor"]     = "fc"
                     r["config"]["workload_label"] = wl_label
                     all_runs.append(r)
         else:
             print(f"  WARNING: FC data not found: {fc_path}", file=sys.stderr)
 
+        if not include_qemu:
+            continue
         qemu_path = os.path.join(results_dir, qemu_file)
         if os.path.exists(qemu_path):
             for r in load_runs(qemu_path):
@@ -124,14 +128,29 @@ def load_all_runs(results_dir: str, workload_map: list,
 # Chart
 # ---------------------------------------------------------------------------
 
-def _group_x_positions(n_workloads: int, gap: float = 0.6) -> list[float]:
-    """X positions for FC and QEMU groups, with an extra gap between workloads."""
-    xs = []
-    step = 2 + gap  # 2 bars-wide sections + gap
-    for s in range(n_workloads):
-        xs.append(s * step)        # FC group
-        xs.append(s * step + 1)    # QEMU group
-    return xs
+def _build_groups(workload_map: list, fc_mems: list,
+                  include_qemu: bool, gap: float = 0.6):
+    """Group layout: one section per workload, one group per FC memory size
+    (plus QEMU if enabled), with an extra gap between workload sections.
+
+    Returns (groups, xs): groups = (hypervisor, mem_size_mib, workload_label,
+    x_tick_label) per bar group; xs = x position per group. FC ticks carry
+    an "FC" prefix only when QEMU groups are shown.
+    """
+    prefix = "FC\n" if include_qemu else ""
+    groups, xs = [], []
+    pos = 0.0
+    for wl_label, _, _ in workload_map:
+        for m in fc_mems:
+            groups.append(("fc", m, wl_label, prefix + mem_label(m)))
+            xs.append(pos)
+            pos += 1.0
+        if include_qemu:
+            groups.append(("qemu", None, wl_label, "QEMU\n" + mem_label(16384)))
+            xs.append(pos)
+            pos += 1.0
+        pos += gap
+    return groups, xs
 
 
 def plot_graph4(all_runs: list[dict],
@@ -142,20 +161,15 @@ def plot_graph4(all_runs: list[dict],
                 unit: str,
                 out_path: str,
                 workload_map: list,
-                fc_mem: int):
-    """Grouped bar chart: 4 bars × (2 hypervisors × N workloads) groups."""
-    hv_labels = {
-        "fc":   f"FC\n{fc_mem} MiB",
-        "qemu": "QEMU\n16384 MiB",
-    }
-    # Ordered list of (hypervisor, workload_label) groups
-    groups = [
-        (hv, wl_label)
-        for wl_label, _, _ in workload_map
-        for hv in ("fc", "qemu")
-    ]
+                fc_mem: int,
+                fc_mems: list = None,
+                include_qemu: bool = True):
+    """Grouped bar chart: 4 bars per (hypervisor/mem × workload) group."""
+    fc_mems = fc_mems or [fc_mem]
+    groups, xs = _build_groups(workload_map, fc_mems, include_qemu)
+    n_sub = len(fc_mems) + (1 if include_qemu else 0)
 
-    x = np.array(_group_x_positions(len(workload_map)))
+    x = np.array(xs)
     n_series = len(_SERIES)
     width = 0.7 / n_series
 
@@ -163,14 +177,16 @@ def plot_graph4(all_runs: list[dict],
 
     for si, (mode_key, mode_label, color) in enumerate(_SERIES):
         means, stds = [], []
-        for hv, wl_label in groups:
+        for hv, mem, wl_label, _ in groups:
+            match = dict(hypervisor=hv, workload_label=wl_label)
+            if mem is not None:
+                match["mem_size_mib"] = mem
             if mode_key == "baseline":
-                runs = select(all_runs, hypervisor=hv, workload_label=wl_label)
+                runs = select(all_runs, **match)
                 vals = [baseline_fn(r) / scale for r in runs
                         if _safe_val(baseline_fn, r) > 0]
             else:
-                runs = select(all_runs, hypervisor=hv,
-                              workload_label=wl_label, mode=mode_key)
+                runs = select(all_runs, mode=mode_key, **match)
                 vals = [during_fn(r) / scale for r in runs
                         if _safe_val(during_fn, r) > 0]
             mean, std = agg(vals)
@@ -183,13 +199,12 @@ def plot_graph4(all_runs: list[dict],
 
     # Sub-labels: hypervisor + mem per tick
     ax.set_xticks(x)
-    ax.set_xticklabels([hv_labels[hv] for hv, _ in groups],
-                       fontsize=FONTSIZE - 2)
+    ax.set_xticklabels([g[3] for g in groups], fontsize=FONTSIZE - 2)
     ax.tick_params(axis="y", labelsize=FONTSIZE)
 
-    # Section labels: workload name centred over each FC+QEMU pair
+    # Section labels: workload name centred over each section
     for i, (wl_label, _, _) in enumerate(workload_map):
-        mid = (x[i * 2] + x[i * 2 + 1]) / 2
+        mid = (x[i * n_sub] + x[i * n_sub + n_sub - 1]) / 2
         ax.text(mid, -0.17, wl_label, ha="center", va="top",
                 fontsize=LABEL_FONTSIZE, fontweight="bold",
                 transform=ax.get_xaxis_transform())
@@ -220,18 +235,26 @@ def _safe_val(fn, run: dict) -> float:
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Plot combined FC + QEMU snapshot benchmark (Graph 4).",
+        description="Plot throughput and latency during snapshot (Figure 9).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     ap.add_argument("--results-dir", default=_RESULTS_DIR,
                     help="Directory containing benchmark JSON files")
-    ap.add_argument("--fc-mem", type=int, default=_FC_MEM,
-                    metavar="MiB", help="FC memory size to compare")
+    ap.add_argument("--fc-mems", type=int, nargs="+", default=[_FC_MEM],
+                    metavar="MiB", help="FC memory sizes to compare")
     ap.add_argument("--out-dir", default=_OUT_DIR,
-                    help="Output directory for PNG files")
+                    help="Output directory for figures")
+    ap.add_argument("--output-throughput", default="graph4_throughput.png",
+                    help="Throughput figure filename (relative to --out-dir)")
+    ap.add_argument("--output-latency", default="graph4_latency.png",
+                    help="Latency figure filename (relative to --out-dir)")
+    ap.add_argument("--no-qemu", action="store_true",
+                    help="Drop the QEMU comparison groups")
     args = ap.parse_args()
+    include_qemu = not args.no_qemu
 
-    all_runs = load_all_runs(args.results_dir, _WORKLOAD_MAP, args.fc_mem)
+    all_runs = load_all_runs(args.results_dir, _WORKLOAD_MAP, args.fc_mems,
+                             include_qemu=include_qemu)
     if not all_runs:
         print("ERROR: no runs loaded — check JSON files exist in results-dir",
               file=sys.stderr)
@@ -248,9 +271,11 @@ def main():
         ylabel       = "Avg Throughput During Snapshot",
         scale        = _OPS_SCALE,
         unit         = _OPS_UNIT,
-        out_path     = os.path.join(args.out_dir, "graph4_throughput.png"),
+        out_path     = os.path.join(args.out_dir, args.output_throughput),
         workload_map = _WORKLOAD_MAP,
-        fc_mem       = args.fc_mem,
+        fc_mem       = args.fc_mems[0],
+        fc_mems      = args.fc_mems,
+        include_qemu = include_qemu,
     )
 
     print("\nPlotting latency chart...")
@@ -261,9 +286,11 @@ def main():
         ylabel       = "Avg Latency During Snapshot",
         scale        = 1.0,
         unit         = "µs",
-        out_path     = os.path.join(args.out_dir, "graph4_latency.png"),
+        out_path     = os.path.join(args.out_dir, args.output_latency),
         workload_map = _WORKLOAD_MAP,
-        fc_mem       = args.fc_mem,
+        fc_mem       = args.fc_mems[0],
+        fc_mems      = args.fc_mems,
+        include_qemu = include_qemu,
     )
 
     print("\nDone.")

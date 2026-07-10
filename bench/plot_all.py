@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Master script: produce all benchmark figures in one invocation.
-
-Outputs (all in bench/results/):
-  graph1_downtime.png      — VM downtime: full vs. live (UFFD) by config
-  graph2_total_time.png    — Total snapshot time: full vs. live (UFFD) by config
-  graph4_throughput.png    — Avg throughput during snapshot: FC vs. QEMU
-  graph4_latency.png       — Avg latency during snapshot: FC vs. QEMU
-
-Usage (zero-arg from bench/):
-    python3 plot_all.py
-"""
+# Master script: produce all benchmark figures in one invocation.
+#
+# Outputs (all in bench/results/):
+#   graph1_downtime.png      — VM downtime: full vs. live (UFFD) by config
+#   graph2_total_time.png    — Total snapshot time: full vs. live (UFFD) by config
+#   graph4_throughput.png    — Avg throughput during snapshot: FC vs. QEMU
+#   graph4_latency.png       — Avg latency during snapshot: FC vs. QEMU
+#
+# Usage (zero-arg from bench/):
+#   python3 plot_all.py
 
 import os
 import sys

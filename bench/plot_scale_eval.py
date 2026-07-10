@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot scalability benchmark results: bpf_fault vs baseline only.
 #
 # Usage:

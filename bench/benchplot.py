@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# NB: the module docstring below doubles as the CLI --help text.
 """benchplot — unified benchmark plotting CLI.
 
 CSV-based paper-ready charts:

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot dynamic linking startup: wall time and dirty memory for --version
 # across Chrome, Clang, Deno, Docker, Node.
 #
@@ -23,7 +21,7 @@ plt.rcParams["ps.fonttype"] = 42
 import numpy as np
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(SCRIPT_DIR, "results/dynlink")
+RESULTS_DIR = os.path.join(SCRIPT_DIR, "../results/dynlink")
 DEFAULT_OUTPUT_TIME = os.path.join(SCRIPT_DIR, "../figures/dynlink_startup_time.pdf")
 DEFAULT_OUTPUT_MEM = os.path.join(SCRIPT_DIR, "../figures/dynlink_startup_mem.pdf")
 

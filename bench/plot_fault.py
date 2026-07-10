@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot single-threaded fault benchmark results: latency by fault type.
 #
 # When results contain both read and write access modes, missing faults

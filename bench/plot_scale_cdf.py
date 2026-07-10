@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot CDF of per-thread completion times from scale benchmark results.
 #
 # Reads scale_results.json (same format as run_bench_scale.py output) and
