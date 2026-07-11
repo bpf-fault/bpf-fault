@@ -21,8 +21,14 @@ autoreconf -ivf
 make -j"$(nproc)"
 sudo cp memtier_benchmark /usr/local/bin/
 
-# The snapshot benchmark requires the fork's --stats-interval flag
-if ! memtier_benchmark --help 2>&1 | grep -q "stats-interval"; then
+# The snapshot benchmark requires the fork's --stats-interval flag.
+# memtier_benchmark's --help path returns a non-zero exit status by design
+# (memtier_benchmark.cpp: `case o_help: return -1;`), so under `set -o
+# pipefail` a naive `memtier_benchmark --help | grep -q ...` always reports
+# failure regardless of what grep actually matched. Capture the output
+# separately so memtier_benchmark's exit code can't poison the pipeline.
+help_output=$(memtier_benchmark --help 2>&1 || true)
+if ! grep -q "stats-interval" <<<"$help_output"; then
 	echo "Installed memtier_benchmark does not support --stats-interval."
 	exit 1
 fi

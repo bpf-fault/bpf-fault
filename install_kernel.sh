@@ -30,6 +30,33 @@ scripts/config --set-str LOCALVERSION "-bpf-fault"
 scripts/config --set-str SYSTEM_TRUSTED_KEYS ''
 scripts/config --set-str SYSTEM_REVOCATION_KEYS ''
 
+# localmodconfig strips these since they aren't in use by the currently
+# running kernel, but Docker's default bridge network needs them.
+echo "Enabling netfilter/bridge modules required for Docker networking..."
+# NETFILTER_XTABLES gates the "-m addrtype"/"-m conntrack"/MASQUERADE match
+# extensions below (net/netfilter/Kconfig); without it enabled first,
+# olddefconfig silently drops those as unreachable.
+scripts/config --module CONFIG_NETFILTER_XTABLES
+scripts/config --module CONFIG_BRIDGE
+scripts/config --module CONFIG_BRIDGE_NETFILTER
+scripts/config --module CONFIG_VETH
+scripts/config --module CONFIG_NF_CONNTRACK
+scripts/config --module CONFIG_NF_NAT
+scripts/config --module CONFIG_IP_NF_NAT
+scripts/config --module CONFIG_IP_NF_FILTER
+scripts/config --module CONFIG_IP_NF_TARGET_MASQUERADE
+scripts/config --module CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
+scripts/config --module CONFIG_NETFILTER_XT_MATCH_CONNTRACK
+scripts/config --module CONFIG_NETFILTER_XT_TARGET_MASQUERADE
+scripts/config --module CONFIG_NFT_CHAIN_NAT
+scripts/config --module CONFIG_NFT_NAT
+scripts/config --module CONFIG_NFT_MASQ
+scripts/config --module CONFIG_NFT_CT
+scripts/config --module CONFIG_NFT_COMPAT
+# containerd's default snapshotter needs overlayfs.
+scripts/config --module CONFIG_OVERLAY_FS
+make olddefconfig
+
 echo "Building and installing the kernel..."
 echo "If prompted, hit enter to continue."
 python3 build.py install
