@@ -3,13 +3,13 @@
 	url = git@github.com:bpf-fault/linux-bpf-fault.git
 [submodule "efency"]
 	path = efency
-	url = git@github.com:bpf-fault/efency.git
+	url = https://github.com/bpf-fault/efency.git
 [submodule "bpf-dynlink"]
 	path = bpf-dynlink
-	url = git@github.com:bpf-fault/bpf-dynlink.git
+	url = https://github.com/bpf-fault/bpf-dynlink.git
 [submodule "firecracker"]
 	path = firecracker
-	url = git@github.com:bpf-fault/firecracker.git
+	url = https://github.com/bpf-fault/firecracker.git
 [submodule "memtier_benchmark"]
 	path = memtier_benchmark
-	url = git@github.com:bpf-fault/memtier_benchmark.git
+	url = https://github.com/bpf-fault/memtier_benchmark.git
