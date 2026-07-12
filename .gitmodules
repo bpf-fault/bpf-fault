@@ -4,3 +4,6 @@
 [submodule "memtier_benchmark"]
 	path = memtier_benchmark
 	url = https://github.com/bpf-fault/memtier_benchmark.git
+[submodule "firecracker"]
+	path = firecracker
+	url = https://github.com/bpf-fault/firecracker.git
