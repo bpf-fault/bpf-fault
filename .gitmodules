@@ -10,3 +10,6 @@
 [submodule "efency"]
 	path = efency
 	url = https://github.com/bpf-fault/efency.git
+[submodule "bpf-dynlink"]
+	path = bpf-dynlink
+	url = https://github.com/bpf-fault/bpf-dynlink.git
