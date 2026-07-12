@@ -7,3 +7,6 @@
 [submodule "firecracker"]
 	path = firecracker
 	url = https://github.com/bpf-fault/firecracker.git
+[submodule "efency"]
+	path = efency
+	url = https://github.com/bpf-fault/efency.git
