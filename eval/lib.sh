@@ -64,15 +64,23 @@ _progress_line() {
 # Redraw loop for the live two-line display (background job on a TTY)
 _progress_ticker() {
 	trap 'exit 0' TERM
-	local first=1 count reused msg width
+	local first=1 count reused msg width left pad
 	while :; do
 		{ read -r count; read -r reused; read -r msg; } < "$_P_STATE"
-		width=$(tput cols 2>/dev/null || echo 80)
+		width=$(tput cols 2>/dev/null </dev/tty || echo 80)
 		[ "$first" = 1 ] || printf '\033[2A'
 		first=0
-		_progress_line \
-			"  ${_P_PREFIX}${_P_NAME}: in progress [${count}/${_P_TOTAL}] · $(_progress_elapsed)" \
-			"$BOLD" "$width"
+		# Show the log path while running, in the same column as the
+		# completion line; drop it when the terminal is too narrow.
+		left="  ${_P_PREFIX}${_P_NAME}: in progress [${count}/${_P_TOTAL}] · $(_progress_elapsed)"
+		pad=$((68 - ${#left}))
+		[ "$pad" -lt 3 ] && pad=3
+		if [ $((${#left} + pad + ${#_P_LOG} + 7)) -le "$width" ]; then
+			printf '\r%s%*s%s\033[K\n' \
+				"${BOLD}${left}${RESET}" "$pad" "" "${DIM}(log: $_P_LOG)${RESET}"
+		else
+			_progress_line "$left" "$BOLD" "$width"
+		fi
 		_progress_line "    ▶ ${msg}" "" "$width"
 		sleep 1
 	done
@@ -251,7 +259,7 @@ checklist_init() {
 _cl_paint() {
 	[ "$_LIVE" = 1 ] || return 0
 	local text="  ▶ [${_CL_COUNT}/${_CL_TOTAL}] ${_CL_CUR}${_CL_MSG:+ — ${_CL_MSG}} · $(_cl_fmt_dur $(( $(date +%s) - _CL_STEP_START )))"
-	local width=$(tput cols 2>/dev/null || echo 80)
+	local width=$(tput cols 2>/dev/null </dev/tty || echo 80)
 	if [ "${#text}" -gt "$width" ]; then
 		text="${text:0:$((width - 1))}…"
 	fi
