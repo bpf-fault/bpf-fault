@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
-# Plot scalability benchmark results: bpf_fault vs baseline only.
+# Plot scalability benchmark results: bpf_fault vs baseline vs uffd.
 #
 # Usage:
 #   ./plot_scale_eval.py                                         # defaults
@@ -21,7 +19,7 @@ DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "../figures/scale_eval.pdf")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Plot scalability: bpf vs baseline")
+    parser = argparse.ArgumentParser(description="Plot scalability: bpf vs baseline vs uffd")
     parser.add_argument("-i", "--input", default=DEFAULT_INPUT,
                         help="Input JSON results file")
     parser.add_argument("-o", "--output", default=DEFAULT_OUTPUT,
@@ -33,6 +31,15 @@ def main():
         sys.exit(1)
 
     results = parse_results_file(args.input, BenchResults)
+
+    # The reused results file can accumulate runs with different page or
+    # CPU counts, which would get averaged together below.
+    for field in ("pages_per_thread", "cpus"):
+        values = {r.config.get(field) for r in results}
+        if len(values) > 1:
+            print(f"warning: results mix multiple {field} values "
+                  f"({sorted(values, key=str)}), averaging across them",
+                  file=sys.stderr)
 
     plot_line_chart(
         results,
