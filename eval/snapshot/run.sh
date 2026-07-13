@@ -33,8 +33,8 @@ MEM_SIZES="${MEM_SIZES:-4096 8192}"
 mkdir -p "$BASE_DIR/results"
 
 # One step per configuration: 3 snapshot modes per (workload, memory
-# size, iteration). The runner reuses existing results and only runs
-# configurations missing from them.
+# size, iteration). The benchmark writes its records and timeseries
+# directly into results/ and only runs configurations missing from them.
 set -- $WORKLOADS
 NW=$#
 set -- $MEM_SIZES
@@ -43,16 +43,15 @@ TOTAL=$((NW * 3 * NM * ITERATIONS))
 progress_init "snapshot" "$TOTAL" "$BASE_DIR/results/logs/run-snapshot.log"
 
 cd "$FC_PATH"
-for wl in $WORKLOADS; do
-	python3 -u tests/integration_tests/functional/run_snapshot_benchmark.py \
-		--workload "$wl" \
-		--iterations "$ITERATIONS" \
-		--mem-sizes $MEM_SIZES \
-		--bench-dir "$BASE_DIR" 2>&1 \
-		| filter_progress \
-			-M '^Running mode=|Installing build tools|Building version=|test session starts' \
-			"s/^Running mode=([a-z_]+).*/$wl — preparing \\1 mode test container/; s/.*Installing build tools.*/$wl — preparing test container (build tools)/; s/^.*Building version=.*/$wl — building firecracker/; s/.*test session starts.*/$wl — collecting tests/" \
-			'Running config: ' 's/.*Running config: //'
-done
+export EXPERIMENT_RESULTS_DIR="$BASE_DIR/results"
+./tools/devtool -y bench -- \
+	--workloads $WORKLOADS \
+	--iterations "$ITERATIONS" \
+	--mem-sizes $MEM_SIZES \
+	--results-dir /bench_results 2>&1 \
+	| filter_progress \
+		-M 'Installing build tools|Building version=|Copy artifacts|Create TMPDIR' \
+		's/.*Installing build tools.*/preparing test container (build tools)/; s/^.*Building version=.*/building firecracker/; s/.*Copy artifacts.*/staging guest artifacts/; s/.*Create TMPDIR.*/starting benchmark container/' \
+		'Running config: ' 's/.*Running config: //'
 
 progress_done
