@@ -16,14 +16,28 @@ sudo apt-get update
 # clang-19: BPF arena address-space casts require clang >= 19.
 # gawk, bison, python3, texinfo, gettext: libc dependencies.
 # patchelf: required to modify the dynamic linker path of test executables.
-# nodejs, docker: experiment dependencies.
+# nodejs: experiment dependency.
 # unzip: required by the Deno installer.
 sudo apt-get install -y gawk bison python3 texinfo gettext clang-19 patchelf \
-			nodejs docker.io unzip
+			nodejs unzip
 
 echo "Installing Deno..."
 if ! command -v deno &> /dev/null; then
 	curl -fsSL https://deno.land/install.sh | sudo DENO_INSTALL=/usr/local sh -s -- --yes
+fi
+
+echo "Installing docker CLI..."
+# docker.io >= 29.x links the docker CLI with Go's internal linker, which
+# emits no DT_RELACOUNT tag; without it, glibc's relative-relocation
+# batch path (and thus BPF deferral) never engages. Extract the CLI from
+# the last externally linked build instead of using the system docker.
+if [[ ! -f /usr/local/bin/docker-bench ]]; then
+	DOCKER_DEB_URL="https://launchpad.net/ubuntu/+archive/primary/+files/docker.io_28.2.2-0ubuntu1_amd64.deb"
+	DOCKER_TMP=$(mktemp -d)
+	curl -fsSL -o "$DOCKER_TMP/docker.deb" "$DOCKER_DEB_URL"
+	dpkg-deb -x "$DOCKER_TMP/docker.deb" "$DOCKER_TMP/extract"
+	sudo install -m 755 "$DOCKER_TMP/extract/usr/bin/docker" /usr/local/bin/docker-bench
+	rm -rf "$DOCKER_TMP"
 fi
 
 echo "Installing Google Chrome..."

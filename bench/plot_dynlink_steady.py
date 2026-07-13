@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot dynamic linking steady-state dirty memory across workloads for
-# Clang, Deno, and Chrome in a single grouped bar chart.
+# tested applications in a single grouped bar chart.
 #
 # Usage:
 #   ./plot_dynlink_steady.py
@@ -23,7 +21,7 @@ plt.rcParams["ps.fonttype"] = 42
 import numpy as np
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(SCRIPT_DIR, "results/dynlink")
+RESULTS_DIR = os.path.join(SCRIPT_DIR, "../results/dynlink")
 DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "../figures/dynlink_steady.pdf")
 
 
@@ -60,13 +58,19 @@ def parse_configure_memory(path):
 
 
 def collect_data():
-    """Return list of (display_label, std_kb, bpf_kb) tuples."""
+    """Return (data, missing): (display_label, std_kb, bpf_kb) tuples and
+    a list of what could not be parsed."""
     data = []
+    unparsed = []
 
     clang_path = os.path.join(RESULTS_DIR, "clang_workloads.txt")
     deno_path = os.path.join(RESULTS_DIR, "deno_workloads.txt")
     chrome_path = os.path.join(RESULTS_DIR, "chrome_workloads.txt")
     configure_path = os.path.join(RESULTS_DIR, "configure_ffmpeg.txt")
+
+    def missing(what):
+        print(f"warning: {what}", file=sys.stderr)
+        unparsed.append(what)
 
     if os.path.isfile(clang_path):
         for label, display in [("clang -O0 -c", "Clang\n-O0 -c"),
@@ -74,11 +78,19 @@ def collect_data():
             std, bpf = parse_bench_memory(clang_path, label)
             if std is not None:
                 data.append((display, std, bpf))
+            else:
+                missing(f"no '{label}' memory data in {clang_path}")
+    else:
+        missing(f"{clang_path} not found")
 
     if os.path.isfile(configure_path):
         std, bpf = parse_configure_memory(configure_path)
         if std is not None:
             data.append(("Clang\nconfigure", std, bpf))
+        else:
+            missing(f"no configure probe memory data in {configure_path}")
+    else:
+        missing(f"{configure_path} not found")
 
     if os.path.isfile(deno_path):
         for label, display in [("deno eval", "Deno\neval"),
@@ -86,6 +98,10 @@ def collect_data():
             std, bpf = parse_bench_memory(deno_path, label)
             if std is not None:
                 data.append((display, std, bpf))
+            else:
+                missing(f"no '{label}' memory data in {deno_path}")
+    else:
+        missing(f"{deno_path} not found")
 
     if os.path.isfile(chrome_path):
         for label, display in [("example.com", "Chrome\nexample.com"),
@@ -93,8 +109,12 @@ def collect_data():
             std, bpf = parse_chrome_memory(chrome_path, label)
             if std is not None:
                 data.append((display, std, bpf))
+            else:
+                missing(f"no '{label}' memory data in {chrome_path}")
+    else:
+        missing(f"{chrome_path} not found")
 
-    return data
+    return data, unparsed
 
 
 def main():
@@ -103,9 +123,11 @@ def main():
     parser.add_argument("-o", "--output", default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 
-    data = collect_data()
-    if not data:
-        print("error: no results found", file=sys.stderr)
+    data, unparsed = collect_data()
+    if unparsed:
+        print(f"error: {len(unparsed)} workload(s) missing or unparseable "
+              f"(see warnings above); the figure would be incomplete",
+              file=sys.stderr)
         sys.exit(1)
 
     labels = [d[0] for d in data]

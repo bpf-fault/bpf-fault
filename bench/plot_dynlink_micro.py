@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot dynamic linking microbenchmarks: synthetic no-touch (4K, 100K, 1M)
 # and dlopen no-access (1M).
 #
@@ -17,7 +15,7 @@ from bench_lib import BenchResults, BenchRun
 from bench_plot_lib import plot_grouped_bar_chart
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(SCRIPT_DIR, "results/dynlink")
+RESULTS_DIR = os.path.join(SCRIPT_DIR, "../results/dynlink")
 DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "../figures/dynlink_micro.pdf")
 
 
@@ -26,6 +24,10 @@ def parse_synthetic(path):
     text = open(path).read()
     std = re.search(r'Standard\s+[\d.]+ms\s+([\d.]+)ms', text)
     bpf = re.search(r'BPF\s+[\d.]+ms\s+([\d.]+)ms', text)
+    if not std or not bpf:
+        print(f"error: could not parse timing results in {path}",
+              file=sys.stderr)
+        sys.exit(1)
     return float(std.group(1)), float(bpf.group(1))
 
 
@@ -34,6 +36,10 @@ def parse_dlopen(path):
     text = open(path).read()
     std = re.search(r'Standard dlopen \(no access\)\s+([\d,]+)\s+([\d,]+)', text)
     bpf = re.search(r'BPF dlopen \(no access\)\s+([\d,]+)\s+([\d,]+)', text)
+    if not std or not bpf:
+        print(f"error: could not parse dlopen results in {path}",
+              file=sys.stderr)
+        sys.exit(1)
     std_median = int(std.group(2).replace(',', ''))
     bpf_median = int(bpf.group(2).replace(',', ''))
     return std_median / 1000.0, bpf_median / 1000.0  # convert to ms
