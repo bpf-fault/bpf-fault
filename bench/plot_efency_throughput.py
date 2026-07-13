@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot efency benchmark results: two figures, microbenchmarks and applications,
 # both normalized to glibc baseline.
 #
@@ -20,8 +18,8 @@ from bench_lib import BenchResults, BenchRun, parse_results_file
 from bench_plot_lib import plot_grouped_bar_chart, results_select
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_MICRO_INPUT = os.path.join(SCRIPT_DIR, "../../efency/results/malloc_results.json")
-DEFAULT_APPS_INPUT = os.path.join(SCRIPT_DIR, "../../efency/results/app_results.json")
+DEFAULT_MICRO_INPUT = os.path.join(SCRIPT_DIR, "../results/efency/malloc_results.json")
+DEFAULT_APPS_INPUT = os.path.join(SCRIPT_DIR, "../results/efency/app_results.json")
 DEFAULT_OUTPUT_MICRO = os.path.join(SCRIPT_DIR, "../figures/efency_micro.pdf")
 DEFAULT_OUTPUT_APPS = os.path.join(SCRIPT_DIR, "../figures/efency_apps.pdf")
 
