@@ -28,4 +28,4 @@ Iteration counts are set per benchmark in the bpf-dynlink repo's
 `test_e2e/run_all_benchmarks.sh` (50 for the microbenchmarks and Clang,
 fewer for the slower application workloads).
 
-Expected runtime: a few hours.
+Expected runtime: a few minutes.
