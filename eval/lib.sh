@@ -258,6 +258,7 @@ checklist_init() {
 # Repaint the in-progress line (no newline; truncated to terminal width)
 _cl_paint() {
 	[ "$_LIVE" = 1 ] || return 0
+	printf -v _CL_LAST_PAINT '%(%s)T' -1
 	local text="  ▶ [${_CL_COUNT}/${_CL_TOTAL}] ${_CL_CUR}${_CL_MSG:+ — ${_CL_MSG}} · $(_cl_fmt_dur $(( $(date +%s) - _CL_STEP_START )))"
 	local width=$(tput cols 2>/dev/null </dev/tty || echo 80)
 	if [ "${#text}" -gt "$width" ]; then
@@ -355,12 +356,19 @@ checklist_filter() {
 		msgsed="$3"
 		shift 3
 	fi
-	local pat="$1" sedscript="$2" line desc seen=""
+	local pat="$1" sedscript="$2" line desc now seen=""
 	while :; do
 		if IFS= read -r -t 1 line; then
 			printf '%s\n' "$line" >> "$_CL_LOG"
 			if [ "${VERBOSE:-0}" = 1 ]; then
 				printf '%s\n' "$line"
+			fi
+			# Steady output keeps resetting the read timeout, so the
+			# elapsed time would only repaint during quiet spells;
+			# repaint here too, at most once a second.
+			printf -v now '%(%s)T' -1
+			if [ -n "$_CL_CUR" ] && [ "$now" != "${_CL_LAST_PAINT:-}" ]; then
+				_cl_paint
 			fi
 			if [[ $line =~ $pat ]]; then
 				desc=$(printf '%s\n' "$line" | sed -E "$sedscript")
