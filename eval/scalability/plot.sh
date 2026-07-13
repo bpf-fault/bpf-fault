@@ -7,14 +7,20 @@ BASE_DIR=$(realpath "$(dirname $SCRIPT_PATH)/../../")
 RESULTS_PATH="$BASE_DIR/results"
 FIGURES_PATH="$BASE_DIR/figures"
 
+. "$BASE_DIR/eval/lib.sh"
+
 mkdir -p "$FIGURES_PATH"
 
-python3 "$BASE_DIR/bench/plot_scale.py" \
+progress_init "scalability plots" 2 "$RESULTS_PATH/logs/plot-scalability.log"
+
+progress_step "figure3b"
+quiet python3 "$BASE_DIR/bench/plot_scale.py" \
 	-i "$RESULTS_PATH/scale_results.json" \
 	-o "$FIGURES_PATH/figure3b.pdf"
 
-python3 "$BASE_DIR/bench/plot_scale_eval.py" \
+progress_step "figure7"
+quiet python3 "$BASE_DIR/bench/plot_scale_eval.py" \
 	-i "$RESULTS_PATH/scale_results.json" \
 	-o "$FIGURES_PATH/figure7.pdf"
 
-echo "Figures saved to $FIGURES_PATH"
+progress_done "figures: figure3b.pdf, figure7.pdf"

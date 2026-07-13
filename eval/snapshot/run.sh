@@ -2,15 +2,15 @@
 # Firecracker snapshot run script (Figures 8 and 9)
 set -eu -o pipefail
 
-if ! uname -r | grep -q "bpf-fault"; then
-	echo "This script is intended to be run on a bpf_fault kernel."
-	echo "Please switch to the bpf_fault kernel and try again."
-	exit 1
-fi
-
 SCRIPT_PATH=$(realpath $0)
 BASE_DIR=$(realpath "$(dirname $SCRIPT_PATH)/../../")
 FC_PATH="$BASE_DIR/firecracker"
+
+. "$BASE_DIR/eval/lib.sh"
+
+if ! uname -r | grep -q "bpf-fault"; then
+	die "This script is intended to be run on a bpf_fault kernel."$'\n'"Please switch to the bpf_fault kernel and try again."
+fi
 
 # Workloads: redis_light redis_heavy redis_mixed memcached_light
 #            memcached_heavy stream
@@ -21,14 +21,20 @@ MEM_SIZES="${MEM_SIZES:-4096 8192}"
 
 mkdir -p "$BASE_DIR/results"
 
+# One step per (workload, snapshot mode)
+set -- $WORKLOADS
+TOTAL=$(($# * 3))
+progress_init "snapshot" "$TOTAL" "$BASE_DIR/results/logs/run-snapshot.log"
+
 cd "$FC_PATH"
 for wl in $WORKLOADS; do
-	echo "Running snapshot benchmark: $wl..."
-	python3 tests/integration_tests/functional/run_snapshot_benchmark.py \
+	python3 -u tests/integration_tests/functional/run_snapshot_benchmark.py \
 		--workload "$wl" \
 		--iterations "$ITERATIONS" \
 		--mem-sizes $MEM_SIZES \
-		--bench-dir "$BASE_DIR"
+		--bench-dir "$BASE_DIR" 2>&1 \
+		| filter_progress '^Running mode=' \
+			"s/^Running mode=([a-z_]+).*/$wl — \\1 snapshot mode/"
 done
 
-echo "Results saved to $BASE_DIR/results/snapshot_benchmark_*.json"
+progress_done
