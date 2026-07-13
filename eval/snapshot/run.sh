@@ -52,7 +52,7 @@ for wl in $WORKLOADS; do
 		| filter_progress \
 			-M '^Running mode=|Installing build tools|Building version=|test session starts' \
 			"s/^Running mode=([a-z_]+).*/$wl — preparing \\1 mode test container/; s/.*Installing build tools.*/$wl — preparing test container (build tools)/; s/^.*Building version=.*/$wl — building firecracker/; s/.*test session starts.*/$wl — collecting tests/" \
-			'^Running config: ' 's/^Running config: //'
+			'Running config: ' 's/.*Running config: //'
 done
 
 progress_done
