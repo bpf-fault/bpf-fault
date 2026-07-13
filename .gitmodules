@@ -1,6 +1,6 @@
 [submodule "linux"]
 	path = linux
-	url = git@github.com:bpf-fault/linux-bpf-fault.git
+	url = https://github.com/bpf-fault/linux-bpf-fault.git
 [submodule "memtier_benchmark"]
 	path = memtier_benchmark
 	url = https://github.com/bpf-fault/memtier_benchmark.git
