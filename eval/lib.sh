@@ -180,17 +180,30 @@ quiet() {
 	fi
 }
 
-# filter_progress [-m] <ere-pattern> [sed-script]
+# filter_progress [-m] [-M <ere-pattern> <sed-script>] <ere-pattern> [sed-script]
 # Log every stdin line; lines matching the pattern become progress steps
 # (or, with -m, current-step updates without advancing the counter),
-# optionally rewritten by the sed script first. Lines containing
-# "Skipping" count as reused work.
+# optionally rewritten by the sed script first. -M adds a secondary
+# pattern whose matches update the current-step line without counting
+# (e.g. setup phases). Lines containing "Skipping" count as reused work.
 filter_progress() {
-	local update=progress_step
-	if [ "$1" = "-m" ]; then
-		update=progress_msg
-		shift
-	fi
+	local update=progress_step msgpat="" msgsed=""
+	while :; do
+		case "${1:-}" in
+		-m)
+			update=progress_msg
+			shift
+			;;
+		-M)
+			msgpat="$2"
+			msgsed="$3"
+			shift 3
+			;;
+		*)
+			break
+			;;
+		esac
+	done
 	local pat="$1" sedscript="${2:-}" line msg
 	while IFS= read -r line; do
 		printf '%s\n' "$line" >> "$_P_LOG"
@@ -205,6 +218,8 @@ filter_progress() {
 				msg=$(printf '%s\n' "$line" | sed -E "$sedscript")
 			fi
 			"$update" "$msg"
+		elif [ -n "$msgpat" ] && [[ $line =~ $msgpat ]]; then
+			progress_msg "$(printf '%s\n' "$line" | sed -E "$msgsed")"
 		fi
 	done
 	return 0

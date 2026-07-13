@@ -27,4 +27,10 @@ access, and the system booted into the `bpf-fault` kernel. See
 controlled by `FIG8_WORKLOAD`/`FIG8_MEM` (default: redis_heavy at
 8192 MiB); pick each panel's iteration by hand from those candidates.
 
+The run reuses completed configurations: an interrupted sweep resumes
+where it stopped. The raw data accumulates in
+`firecracker/test_results/`; delete `experiment_results.csv` there (or
+pass `--no-reuse-results` to `run_snapshot_benchmark.py` directly) to
+force a full re-measurement.
+
 This should take approximately 30 minutes.
