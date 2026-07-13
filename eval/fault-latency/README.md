@@ -17,4 +17,4 @@ kernel with root privileges.
 `run.sh` accepts `ITERATIONS` and `PAGES` environment variables
 (defaults: 3 iterations, 1024 pages).
 
-Expected runtime: a few minutes.
+Expected runtime: one minute.

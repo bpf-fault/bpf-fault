@@ -20,4 +20,4 @@ the `bpf-fault` kernel (for the ebpfency mode).
 ./plot.sh               # generates figures/figure11{a,b}.pdf
 ```
 
-This is expected to take approximately 15 minutes.
+Expected runtime: 15 minutes.

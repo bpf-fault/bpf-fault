@@ -28,7 +28,4 @@ Iteration counts are set per benchmark suite in the bpf-dynlink repo's
 `test_e2e/bench/run_dynlink_bench.py` (50 for the microbenchmarks and
 Clang, fewer for the slower application workloads).
 
-The runner reuses the results file and only runs configurations missing
-from it, so an interrupted sweep resumes where it stopped.
-
-Expected runtime: about half an hour.
+Expected runtime: 3 minutes.
