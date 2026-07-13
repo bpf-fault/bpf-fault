@@ -1,6 +1,5 @@
 # Shared helpers for the Firecracker snapshot plot scripts
-# (plot_snapshot_timeseries.py, plot_snapshot_throughput.py,
-# plot_snapshot_benchmark.py, plot_graphs12.py).
+# (plot_snapshot_timeseries.py, plot_snapshot_throughput.py).
 
 import csv
 import json
