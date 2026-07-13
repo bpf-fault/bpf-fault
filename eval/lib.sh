@@ -1,12 +1,16 @@
-# Shared style and progress helpers for the eval scripts. Sourced, not run.
+# Shared style and progress helpers for the eval and install scripts.
+# Sourced, not run.
 #
-# Scripts drive a compact two-line display, redrawn in place on a TTY:
+# Two display modes:
+#   - progress_* (run/plot scripts): a compact two-line display, redrawn
+#     in place on a TTY —
+#         <name>: in progress [<step>/<total>] · <elapsed>
+#           ▶ <current step>
+#   - checklist_* (install scripts): one permanent line per step; only
+#     the in-progress line is redrawn, then finalized in place.
 #
-#     <name>: in progress [<step>/<total>] · <elapsed>
-#       ▶ <current step>
-#
-# Raw tool output goes to a log file instead of the terminal. Set
-# VERBOSE=1 to stream it through (disables the live display). On a
+# In both, raw tool output goes to a log file instead of the terminal.
+# Set VERBOSE=1 to stream it through (disables the live display). On a
 # non-TTY, the display degrades to appended plain lines.
 #
 # Usage:
@@ -176,6 +180,225 @@ _progress_exit() {
 	printf '%s\n' "${RED}✗ ${_P_PREFIX}${_P_NAME} failed at step ${count}/${_P_TOTAL} (${msg}) after $(_progress_elapsed)${RESET}"
 	printf '%s\n' "  ${DIM}full log: $_P_LOG${RESET}"
 	rm -f "$_P_STATE"
+}
+
+# ---------------------------------------------------------------------------
+# Checklist mode (install scripts)
+#
+# One permanent line per step; only the in-progress line is redrawn (for
+# the elapsed time), then finalized in place:
+#
+#     <name>: 8 steps (log: ...)
+#     ✓ [1/8] install build dependencies                       (0m 42s)
+#     ▶ [2/8] build and install kernel · 12m 04s
+#
+# Usage:
+#     checklist_init "install_kernel" 8 "$BASE_DIR/results/logs/install-kernel.log"
+#     checklist_step "install build dependencies" install_deps
+#     checklist_skip "initialize linux submodule" "already checked out"
+#     long_setup 2>&1 | checklist_filter '^Building' 's/^Building //'
+#     checklist_done "To boot into the kernel: sudo reboot now"
+# ---------------------------------------------------------------------------
+
+# Duration column: the "✓ [k/N] description" text is padded to this width
+_CL_PAD=58
+
+# Print a finalized checklist line, replacing the in-progress line on a
+# TTY (plain append otherwise).
+_cl_final_line() {
+	if [ "$_LIVE" = 1 ]; then
+		printf '\r%s\033[K\n' "$1"
+	else
+		printf '%s\n' "$1"
+	fi
+}
+
+_cl_fmt_dur() {
+	local s="$1"
+	if [ "$s" -ge 3600 ]; then
+		printf '%dh %02dm' $((s / 3600)) $((s % 3600 / 60))
+	else
+		printf '%dm %02ds' $((s / 60)) $((s % 60))
+	fi
+}
+
+# checklist_init <name> <total-steps> <log-file>
+checklist_init() {
+	# Run the last stage of pipelines in this shell, not a subshell, so
+	# checklist_filter's step counters survive into checklist_done.
+	shopt -s lastpipe
+	_CL_NAME="$1"
+	_CL_TOTAL="$2"
+	_CL_LOG="$3"
+	_CL_START=$(date +%s)
+	_CL_COUNT=0
+	_CL_SKIPPED=0
+	_CL_CUR=""
+	_CL_MSG=""
+	_CL_DONE=0
+	mkdir -p "$(dirname "$_CL_LOG")"
+	# Same concurrency guard as progress_init
+	exec 9> "$_CL_LOG.lock"
+	if ! flock -n 9; then
+		die "another '$_CL_NAME' run is already in progress"$'\n'"(close it first, or remove a stale $_CL_LOG.lock)"
+	fi
+	: > "$_CL_LOG"
+	trap _checklist_exit EXIT
+	printf '%s\n' "  ${BOLD}${_CL_NAME}${RESET}: ${_CL_TOTAL} steps ${DIM}(log: $_CL_LOG)${RESET}"
+}
+
+# Repaint the in-progress line (no newline; truncated to terminal width)
+_cl_paint() {
+	[ "$_LIVE" = 1 ] || return 0
+	local text="  ▶ [${_CL_COUNT}/${_CL_TOTAL}] ${_CL_CUR}${_CL_MSG:+ — ${_CL_MSG}} · $(_cl_fmt_dur $(( $(date +%s) - _CL_STEP_START )))"
+	local width=$(tput cols 2>/dev/null || echo 80)
+	if [ "${#text}" -gt "$width" ]; then
+		text="${text:0:$((width - 1))}…"
+	fi
+	printf '\r%s\033[K' "$text"
+}
+
+# Begin an in-progress step
+_cl_open() {
+	_CL_COUNT=$((_CL_COUNT + 1))
+	_CL_CUR="$1"
+	_CL_MSG=""
+	_CL_STEP_START=$(date +%s)
+	if [ "$_LIVE" = 1 ]; then
+		_cl_paint
+	else
+		printf '%s\n' "  ▶ [${_CL_COUNT}/${_CL_TOTAL}] ${_CL_CUR}"
+	fi
+}
+
+# Finalize the in-progress step as completed
+_cl_close_ok() {
+	[ -n "$_CL_CUR" ] || return 0
+	local plain="✓ [${_CL_COUNT}/${_CL_TOTAL}] ${_CL_CUR}"
+	local pad=$((_CL_PAD - ${#plain}))
+	[ "$pad" -lt 2 ] && pad=2
+	_cl_final_line "$(printf '  %s%*s%s' \
+		"${GREEN}✓${RESET} [${_CL_COUNT}/${_CL_TOTAL}] ${_CL_CUR}" \
+		"$pad" "" "${DIM}($(_cl_fmt_dur $(( $(date +%s) - _CL_STEP_START ))))${RESET}")"
+	_CL_CUR=""
+	_CL_MSG=""
+}
+
+# checklist_skip <description> <reason> — permanent line for a step whose
+# work is already done (e.g. a tool that is already installed).
+checklist_skip() {
+	_CL_COUNT=$((_CL_COUNT + 1))
+	_CL_SKIPPED=$((_CL_SKIPPED + 1))
+	local plain="✓ [${_CL_COUNT}/${_CL_TOTAL}] $1"
+	local pad=$((_CL_PAD - ${#plain}))
+	[ "$pad" -lt 2 ] && pad=2
+	_cl_final_line "$(printf '  %s%*s%s' \
+		"${GREEN}✓${RESET} [${_CL_COUNT}/${_CL_TOTAL}] $1" \
+		"$pad" "" "${DIM}(skipped: $2)${RESET}")"
+}
+
+# Finalize the in-progress step as failed, show the log tail, and exit
+_cl_fail() {
+	local rc="$1"
+	_cl_final_line \
+		"  ${RED}✗ [${_CL_COUNT}/${_CL_TOTAL}] ${_CL_CUR} failed after $(_cl_fmt_dur $(( $(date +%s) - _CL_STEP_START )))${RESET}"
+	tail -10 "$_CL_LOG" | sed "s/^/      ${DIM}│${RESET} /"
+	printf '%s\n' "  ${DIM}full log: $_CL_LOG${RESET}"
+	_CL_DONE=1
+	exit "$rc"
+}
+
+# checklist_step <description> <command...> — run the command with its
+# output in the log, showing a live elapsed time; finalize the line as
+# completed or failed. Compound steps go in a shell function.
+checklist_step() {
+	local desc="$1" rc=0
+	shift
+	_cl_open "$desc"
+	if [ "${VERBOSE:-0}" = 1 ]; then
+		printf '\n'
+		"$@" 2>&1 | tee -a "$_CL_LOG" || rc=$?
+	elif [ "$_LIVE" = 1 ]; then
+		"$@" >> "$_CL_LOG" 2>&1 &
+		local pid=$!
+		while kill -0 "$pid" 2>/dev/null; do
+			_cl_paint
+			sleep 0.5
+		done
+		wait "$pid" || rc=$?
+	else
+		"$@" >> "$_CL_LOG" 2>&1 || rc=$?
+	fi
+	[ "$rc" -eq 0 ] || _cl_fail "$rc"
+	_cl_close_ok
+}
+
+# checklist_filter [-M <ere-pattern> <sed-script>] <ere-pattern> <sed-script>
+# Stream-driven steps: log every stdin line; a line matching the pattern
+# finalizes the current step and starts a new one described by the line
+# run through the sed script (lines containing "Skipping" finalize as
+# skipped steps instead). -M lines update the in-progress description.
+# A repeated step description (e.g. after the producer re-execs itself)
+# is ignored rather than double-counted.
+checklist_filter() {
+	local msgpat="" msgsed=""
+	if [ "${1:-}" = "-M" ]; then
+		msgpat="$2"
+		msgsed="$3"
+		shift 3
+	fi
+	local pat="$1" sedscript="$2" line desc seen=""
+	while :; do
+		if IFS= read -r -t 1 line; then
+			printf '%s\n' "$line" >> "$_CL_LOG"
+			if [ "${VERBOSE:-0}" = 1 ]; then
+				printf '%s\n' "$line"
+			fi
+			if [[ $line =~ $pat ]]; then
+				desc=$(printf '%s\n' "$line" | sed -E "$sedscript")
+				case "$seen" in *"|$desc|"*) continue ;; esac
+				seen="$seen|$desc|"
+				_cl_close_ok
+				if [[ $line == *Skipping* ]]; then
+					checklist_skip "$desc" "already done"
+				else
+					_cl_open "$desc"
+				fi
+			elif [ -n "$msgpat" ] && [[ $line =~ $msgpat ]]; then
+				_CL_MSG=$(printf '%s\n' "$line" | sed -E "$msgsed")
+				_cl_paint
+			fi
+		else
+			[ $? -gt 128 ] || break
+			[ -n "$_CL_CUR" ] && _cl_paint
+		fi
+	done
+	# Leave any in-progress step open: if the producer failed, the exit
+	# trap reports it as the failing step; checklist_done closes it on
+	# success.
+	return 0
+}
+
+# checklist_done [note] — print the completion line; the optional note
+# goes on a dim second line.
+checklist_done() {
+	_cl_close_ok
+	_CL_DONE=1
+	local note="${1:-}" extra=""
+	[ "$_CL_SKIPPED" -gt 0 ] && extra=" (${_CL_SKIPPED} skipped)"
+	printf '%s\n' \
+		"${GREEN}✓${RESET} ${BOLD}${_CL_NAME}${RESET} [${_CL_COUNT}/${_CL_TOTAL}] completed in $(_cl_fmt_dur $(( $(date +%s) - _CL_START )))${extra}"
+	if [ -n "$note" ]; then
+		printf '%s\n' "  ${DIM}${note}${RESET}"
+	fi
+}
+
+_checklist_exit() {
+	[ "${_CL_DONE:-1}" = 1 ] && return 0
+	_cl_final_line \
+		"${RED}✗ ${_CL_NAME} failed at step ${_CL_COUNT}/${_CL_TOTAL}${_CL_CUR:+ (${_CL_CUR})} after $(_cl_fmt_dur $(( $(date +%s) - _CL_START )))${RESET}"
+	tail -10 "$_CL_LOG" 2>/dev/null | sed "s/^/      ${DIM}│${RESET} /"
+	printf '%s\n' "  ${DIM}full log: $_CL_LOG${RESET}"
 }
 
 # Run a command with its output appended to the log
