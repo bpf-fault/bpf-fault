@@ -13,11 +13,18 @@ BASE_DIR=$(realpath "$(dirname $SCRIPT_PATH)/../../")
 BENCH_PATH="$BASE_DIR/linux/tools/testing/selftests/bpf/bench_fault"
 RESULTS_PATH="$BASE_DIR/results"
 
+ITERATIONS="${ITERATIONS:-3}"
+PAGES="${PAGES:-1024}"
+
 mkdir -p "$RESULTS_PATH"
 
 make -C "$BENCH_PATH" -j"$(nproc)"
 
-(cd "$BENCH_PATH" && sudo ./run_fault_bench.sh)
+# The runner reuses existing results and only runs configs missing from
+# the results file.
+sudo python3 "$BENCH_PATH/run_bench_fault.py" \
+	-n "$PAGES" \
+	--iterations "$ITERATIONS" \
+	--results-file "$RESULTS_PATH/fault_results.json"
 
-cp "$BENCH_PATH/results/fault_results.json" "$RESULTS_PATH/"
 echo "Results saved to $RESULTS_PATH/fault_results.json"

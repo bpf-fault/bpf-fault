@@ -14,7 +14,7 @@ kernel with root privileges.
 ./plot.sh   # generates figures/figure3a.pdf and the Table 3 LaTeX table
 ```
 
-Iterations are controlled by `run_fault_bench.sh` in the kernel tree
-(default: 3 rounds).
+`run.sh` accepts `ITERATIONS` and `PAGES` environment variables
+(defaults: 3 iterations, 1024 pages).
 
 Expected runtime: a few minutes.

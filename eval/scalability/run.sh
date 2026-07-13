@@ -18,17 +18,16 @@ PAGES="${PAGES:-64}"
 # Figure 3b uses baseline/uffd/uffd_mt/sigsegv; Figure 7 uses baseline/uffd/bpf
 MODES="${MODES:-baseline,uffd,uffd_mt,sigsegv,bpf}"
 
-mkdir -p "$RESULTS_PATH" "$BENCH_PATH/results"
+mkdir -p "$RESULTS_PATH"
 
 make -C "$BENCH_PATH" -j"$(nproc)"
 
 # The runner reuses existing results and only runs configs missing from
 # the results file.
-(cd "$BENCH_PATH" && sudo python3 run_bench_scale.py \
+sudo python3 "$BENCH_PATH/run_bench_scale.py" \
 	-n "$PAGES" \
 	-m "$MODES" \
 	--iterations "$ITERATIONS" \
-	--results-file "$BENCH_PATH/results/scale_results.json")
+	--results-file "$RESULTS_PATH/scale_results.json"
 
-cp "$BENCH_PATH/results/scale_results.json" "$RESULTS_PATH/"
 echo "Results saved to $RESULTS_PATH/scale_results.json"
