@@ -4,11 +4,12 @@
 #
 # Usage:
 #   ./plot_dynlink_startup.py
+#   ./plot_dynlink_startup.py -i ../results/dynlink/dynlink_results.json
 #   ./plot_dynlink_startup.py -o ../figures/dynlink_startup.pdf
 
 import argparse
 import os
-import re
+import statistics
 import sys
 
 import matplotlib
@@ -20,124 +21,88 @@ plt.rcParams["ps.fonttype"] = 42
 
 import numpy as np
 
+from bench_lib import BenchResults, parse_results_file
+from bench_plot_lib import results_select
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(SCRIPT_DIR, "../results/dynlink")
-DEFAULT_OUTPUT_TIME = os.path.join(SCRIPT_DIR, "../figures/dynlink_startup_time.pdf")
+DEFAULT_INPUT = os.path.join(SCRIPT_DIR,
+                             "../results/dynlink/dynlink_results.json")
+DEFAULT_OUTPUT_TIME = os.path.join(SCRIPT_DIR,
+                                   "../figures/dynlink_startup_time.pdf")
 
-def parse_chrome_startup(path):
-    text = open(path).read()
-    # chrome --version                        35        21   -40.0%
-    m = re.search(r'chrome --version\s+(\d+)\s+(\d+)', text)
-    if not m:
-        return None, None, None, None
-    std_ms = float(m.group(1))
-    bpf_ms = float(m.group(2))
-
-    # Chrome has no --version memory measurement; use the "simple HTML"
-    # workload (the lightest page) total Anonymous as the dirty proxy.
-    std_dirty = bpf_dirty = None
-    m_anon = re.search(
-        r'simple HTML \(Std:.*?\n\s+Anonymous\s+(\d+) kB\s+(\d+) kB',
-        text, re.DOTALL)
-    if m_anon:
-        std_dirty = int(m_anon.group(1))
-        bpf_dirty = int(m_anon.group(2))
-
-    return std_ms, bpf_ms, std_dirty, bpf_dirty
+# (display name, timing (app, workload), dirty-memory (benchmark, app,
+# workload)). Chrome has no --version memory measurement; its "simple
+# HTML" workload (the lightest page) is the dirty proxy. Clang's startup
+# timing uses -cc1 --help (pure startup, no compilation).
+APPS = [
+    ("Chrome", ("chrome", "--version"),
+     ("chrome_memory", None, "simple HTML")),
+    ("Clang", ("clang", "-cc1 --help"),
+     ("app_memory", "clang", "--version")),
+    ("Deno", ("deno", "--version"),
+     ("app_memory", "deno", "--version")),
+    ("Docker", ("docker", "--version"),
+     ("app_memory", "docker", "--version")),
+    ("Node", ("node", "--version"),
+     ("app_memory", "node", "--version")),
+]
 
 
-def parse_bench_timing(path, pattern):
-    """Parse a bench_run style timing line."""
-    text = open(path).read()
-    # --- deno --version (startup only) ---
-    #   Standard: 8.64ms/iter
-    #   BPF:      5.98ms/iter
-    m = re.search(pattern + r'.*?\n\s+Standard:\s+([\d.]+)ms/iter\n\s+BPF:\s+([\d.]+)ms/iter',
-                  text, re.DOTALL)
-    if not m:
-        return None, None
-    return float(m.group(1)), float(m.group(2))
+def wall_ms(results, app, workload, mode):
+    """Mean wall time across rounds for one app timing workload."""
+    vals = results_select(
+        results,
+        {"benchmark": "app", "app": app, "workload": workload, "mode": mode},
+        lambda r: r["wall_ms"])
+    return statistics.mean(vals) if vals else None
 
 
-def parse_bench_memory(path, label):
-    """Parse bench_run_memory output for a given label."""
-    text = open(path).read()
-    # --- Memory: clang --version ---
-    #   Standard   RSS: 37360 kB  Priv_Dirty:  9272 kB ...
-    #   BPF        RSS: 31348 kB  Priv_Dirty:  3256 kB ...
-    pattern = rf'Memory: {re.escape(label)}.*?\n\s+Standard.*?Anon:\s+(\d+) kB.*?\n\s+BPF.*?Anon:\s+(\d+) kB'
-    m = re.search(pattern, text, re.DOTALL)
-    if not m:
-        return None, None
-    return int(m.group(1)), int(m.group(2))
+def dirty_kb(results, benchmark, app, workload, mode):
+    match = {"benchmark": benchmark, "workload": workload, "mode": mode}
+    if app is not None:
+        match["app"] = app
+    vals = results_select(results, match, lambda r: r["anon_kb"])
+    return vals[0] if vals else None
 
 
-def collect_data():
+def collect_data(results):
     data = {}
-
-    # Chrome
-    chrome_path = os.path.join(RESULTS_DIR, "chrome_workloads.txt")
-    if os.path.isfile(chrome_path):
-        std_ms, bpf_ms, std_dirty, bpf_dirty = parse_chrome_startup(chrome_path)
-        data["Chrome"] = {
-            "std_wall_ms": std_ms, "bpf_wall_ms": bpf_ms,
-            "std_dirty_kb": std_dirty, "bpf_dirty_kb": bpf_dirty,
+    for name, (t_app, t_workload), (m_bench, m_app, m_workload) in APPS:
+        entry = {
+            "std_wall_ms": wall_ms(results, t_app, t_workload, "std"),
+            "bpf_wall_ms": wall_ms(results, t_app, t_workload, "bpf"),
+            "std_dirty_kb": dirty_kb(results, m_bench, m_app, m_workload,
+                                     "std"),
+            "bpf_dirty_kb": dirty_kb(results, m_bench, m_app, m_workload,
+                                     "bpf"),
         }
-
-    # Clang
-    clang_path = os.path.join(RESULTS_DIR, "clang_workloads.txt")
-    if os.path.isfile(clang_path):
-        std_ms, bpf_ms = parse_bench_timing(clang_path, r'-cc1 --help')
-        std_dirty, bpf_dirty = parse_bench_memory(clang_path, "clang --version")
-        data["Clang"] = {
-            "std_wall_ms": std_ms, "bpf_wall_ms": bpf_ms,
-            "std_dirty_kb": std_dirty, "bpf_dirty_kb": bpf_dirty,
-        }
-
-    # Deno
-    deno_path = os.path.join(RESULTS_DIR, "deno_workloads.txt")
-    if os.path.isfile(deno_path):
-        std_ms, bpf_ms = parse_bench_timing(deno_path, r'--version')
-        std_dirty, bpf_dirty = parse_bench_memory(deno_path, "deno --version")
-        data["Deno"] = {
-            "std_wall_ms": std_ms, "bpf_wall_ms": bpf_ms,
-            "std_dirty_kb": std_dirty, "bpf_dirty_kb": bpf_dirty,
-        }
-
-    # Docker and Node (same bench_run/bench_run_memory formats)
-    for app, fname, timing_pattern, mem_label in [
-        ("Docker", "docker_workloads.txt",
-         r'docker --version', "docker --version"),
-        ("Node", "node_workloads.txt",
-         r'node --version \(startup only\)', "node --version"),
-    ]:
-        path = os.path.join(RESULTS_DIR, fname)
-        if os.path.isfile(path):
-            std_ms, bpf_ms = parse_bench_timing(path, timing_pattern)
-            std_dirty, bpf_dirty = parse_bench_memory(path, mem_label)
-            data[app] = {
-                "std_wall_ms": std_ms, "bpf_wall_ms": bpf_ms,
-                "std_dirty_kb": std_dirty, "bpf_dirty_kb": bpf_dirty,
-            }
-
+        data[name] = entry
     return data
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot startup time and dirty memory")
+        description="Plot startup time; print dirty memory to stderr")
+    parser.add_argument("-i", "--input", default=DEFAULT_INPUT,
+                        help="Input JSON results file")
     parser.add_argument("-o", "--output-time", default=DEFAULT_OUTPUT_TIME)
     args = parser.parse_args()
 
-    data = collect_data()
-
-    app_names = ["Chrome", "Clang", "Deno", "Docker", "Node"]
-    incomplete = [a for a in app_names
-                  if a not in data or None in data[a].values()]
-    if incomplete:
-        print(f"error: missing or unparseable results for: "
-              f"{', '.join(incomplete)} (in {RESULTS_DIR})", file=sys.stderr)
+    if not os.path.isfile(args.input):
+        print(f"error: {args.input} not found", file=sys.stderr)
         sys.exit(1)
+
+    results = parse_results_file(args.input, BenchResults)
+    data = collect_data(results)
+
+    app_names = [name for name, _, _ in APPS]
+    incomplete = [a for a in app_names
+                  if None in data[a].values()]
+    if incomplete:
+        print(f"error: missing results for: {', '.join(incomplete)} "
+              f"(in {args.input})", file=sys.stderr)
+        sys.exit(1)
+
     app_labels = {
         "Chrome": "Chrome\n(1.04M)",
         "Clang":  "Clang\n(512K)",
@@ -153,11 +118,9 @@ def main():
     print(f"  {'─'*10} {'─'*10} {'─'*10} {'─'*8}"
           f"  {'─'*10} {'─'*10} {'─'*8}", file=sys.stderr)
     for app in app_names:
-        d = data.get(app, {})
-        sw = d.get("std_wall_ms", 0)
-        bw = d.get("bpf_wall_ms", 0)
-        sd = d.get("std_dirty_kb", 0)
-        bd = d.get("bpf_dirty_kb", 0)
+        d = data[app]
+        sw, bw = d["std_wall_ms"], d["bpf_wall_ms"]
+        sd, bd = d["std_dirty_kb"], d["bpf_dirty_kb"]
         wp = (bw - sw) / sw * 100 if sw else 0
         dp = (bd - sd) / sd * 100 if sd else 0
         print(f"  {app:<10s} {sw:>10.1f} {bw:>10.1f} {wp:>+7.1f}%"

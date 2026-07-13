@@ -4,108 +4,102 @@
 #
 # Usage:
 #   ./plot_dynlink_micro.py
+#   ./plot_dynlink_micro.py -i ../results/dynlink/dynlink_results.json
 #   ./plot_dynlink_micro.py -o ../figures/dynlink_micro.pdf
 
 import argparse
 import os
-import re
+import statistics
 import sys
 
-from bench_lib import BenchResults, BenchRun
-from bench_plot_lib import plot_grouped_bar_chart
+from bench_lib import BenchResults, BenchRun, parse_results_file
+from bench_plot_lib import plot_grouped_bar_chart, results_select
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(SCRIPT_DIR, "../results/dynlink")
+DEFAULT_INPUT = os.path.join(SCRIPT_DIR,
+                             "../results/dynlink/dynlink_results.json")
 DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "../figures/dynlink_micro.pdf")
 
+MODES = ["std", "bpf"]
+MODE_LABELS = {"std": "Standard", "bpf": "bpf_fault"}
 
-def parse_synthetic(path):
-    """Parse synthetic benchmark output, return (std_median_ms, bpf_median_ms)."""
-    text = open(path).read()
-    std = re.search(r'Standard\s+[\d.]+ms\s+([\d.]+)ms', text)
-    bpf = re.search(r'BPF\s+[\d.]+ms\s+([\d.]+)ms', text)
-    if not std or not bpf:
-        print(f"error: could not parse timing results in {path}",
+
+def synthetic_ms(results, relocs, mode):
+    """Median wall time across rounds of one synthetic configuration."""
+    vals = results_select(
+        results, {"benchmark": "synthetic", "relocs": relocs, "mode": mode},
+        lambda r: r["wall_ms"])
+    if not vals:
+        print(f"error: no synthetic results for {relocs} relocs ({mode})",
               file=sys.stderr)
         sys.exit(1)
-    return float(std.group(1)), float(bpf.group(1))
+    return statistics.median(vals)
 
 
-def parse_dlopen(path):
-    """Parse dlopen benchmark, return (std_no_access_us, bpf_no_access_us)."""
-    text = open(path).read()
-    std = re.search(r'Standard dlopen \(no access\)\s+([\d,]+)\s+([\d,]+)', text)
-    bpf = re.search(r'BPF dlopen \(no access\)\s+([\d,]+)\s+([\d,]+)', text)
-    if not std or not bpf:
-        print(f"error: could not parse dlopen results in {path}",
-              file=sys.stderr)
+def dlopen_ms(results, mode):
+    """Median dlopen time (no access), converted from µs."""
+    vals = results_select(
+        results,
+        {"benchmark": "dlopen", "access": "none", "mode": mode},
+        lambda r: r["median_us"])
+    if not vals:
+        print(f"error: no dlopen results ({mode})", file=sys.stderr)
         sys.exit(1)
-    std_median = int(std.group(2).replace(',', ''))
-    bpf_median = int(bpf.group(2).replace(',', ''))
-    return std_median / 1000.0, bpf_median / 1000.0  # convert to ms
+    return vals[0] / 1000.0
 
 
-def build_results():
-    results = []
-
-    for relocs, label in [(4000, "4K"), (100000, "100K"), (1000000, "1M")]:
-        path = os.path.join(RESULTS_DIR, f"synthetic_notouch_{relocs}.txt")
-        if not os.path.isfile(path):
-            print(f"warning: {path} not found, skipping", file=sys.stderr)
-            continue
-        std_ms, bpf_ms = parse_synthetic(path)
-        results.append(BenchRun(
-            {"workload": f"{label} relocs", "mode": "Standard"},
-            BenchResults({"wall_ms": std_ms})))
-        results.append(BenchRun(
-            {"workload": f"{label} relocs", "mode": "bpf_fault"},
-            BenchResults({"wall_ms": bpf_ms})))
-
-    dlopen_path = os.path.join(RESULTS_DIR, "dlopen_1000000.txt")
-    if os.path.isfile(dlopen_path):
-        std_ms, bpf_ms = parse_dlopen(dlopen_path)
-        results.append(BenchRun(
-            {"workload": "dlopen 1M", "mode": "Standard"},
-            BenchResults({"wall_ms": std_ms})))
-        results.append(BenchRun(
-            {"workload": "dlopen 1M", "mode": "bpf_fault"},
-            BenchResults({"wall_ms": bpf_ms})))
-
-    return results
+def build_results(results):
+    out = []
+    for relocs, label in [(4000, "4K"), (100000, "100K"),
+                          (1000000, "1M")]:
+        for mode in MODES:
+            out.append(BenchRun(
+                {"workload": f"{label} relocs", "mode": mode},
+                BenchResults({"wall_ms": synthetic_ms(results, relocs,
+                                                      mode)})))
+    for mode in MODES:
+        out.append(BenchRun(
+            {"workload": "dlopen 1M", "mode": mode},
+            BenchResults({"wall_ms": dlopen_ms(results, mode)})))
+    return out
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Plot dynamic linking microbenchmarks")
+    parser.add_argument("-i", "--input", default=DEFAULT_INPUT,
+                        help="Input JSON results file")
     parser.add_argument("-o", "--output", default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 
-    results = build_results()
-    if not results:
-        print("error: no results found", file=sys.stderr)
+    if not os.path.isfile(args.input):
+        print(f"error: {args.input} not found", file=sys.stderr)
         sys.exit(1)
+
+    results = parse_results_file(args.input, BenchResults)
+    combined = build_results(results)
 
     # Print summary
     print(f"\n  {'Workload':<20s} {'Mode':<12s} {'Wall (ms)':>10s}",
           file=sys.stderr)
     print(f"  {'─'*20} {'─'*12} {'─'*10}", file=sys.stderr)
-    for r in results:
-        print(f"  {r.config['workload'].replace(chr(10),' '):<20s} "
-              f"{r.config['mode']:<12s} {r.results['wall_ms']:>10.2f}",
-              file=sys.stderr)
+    for r in combined:
+        print(f"  {r.config['workload']:<20s} "
+              f"{MODE_LABELS[r.config['mode']]:<12s} "
+              f"{r.results['wall_ms']:>10.2f}", file=sys.stderr)
     print(file=sys.stderr)
 
     plot_grouped_bar_chart(
-        results,
+        combined,
         group_field="workload",
         series_field="mode",
         y_select_fn=lambda r: r["wall_ms"],
         output=args.output,
         group_order=["4K relocs", "100K relocs", "1M relocs",
                      "dlopen 1M"],
-        series_order=["Standard", "bpf_fault"],
-        series_labels={"Standard": "Baseline", "bpf_fault": "bpf_fault"},
-        series_colors={"Standard": "steelblue", "bpf_fault": "forestgreen"},
+        series_order=MODES,
+        series_labels=MODE_LABELS,
+        series_colors={"std": "steelblue", "bpf": "forestgreen"},
         y_label="Startup time (ms)",
         fontsize=20,
         label_fontsize=28,
