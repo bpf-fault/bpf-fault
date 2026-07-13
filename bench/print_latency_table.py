@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Generate a LaTeX table of per-fault latency (avg and p99) for
 # bpf_fault vs userfaultfd across fault types.
 #
@@ -42,6 +40,14 @@ def main():
         sys.exit(1)
 
     results = parse_results_file(args.input, BenchResults)
+
+    # The reused results file can accumulate runs with different page
+    # counts, which would get averaged together below.
+    num_pages = {r.config.get("num_pages") for r in results}
+    if len(num_pages) > 1:
+        print(f"warning: results mix multiple num_pages values "
+              f"({sorted(num_pages, key=str)}), averaging across them",
+              file=sys.stderr)
 
     # Group by (fault_type, mode), using only write faults.
     # WP and minor are write-only; filtering missing to write-only

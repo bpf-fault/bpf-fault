@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot single-threaded fault benchmark results: latency by fault type.
 #
 # When results contain both read and write access modes, missing faults
@@ -21,7 +19,6 @@ import numpy as np
 from bench_lib import BenchResults, BenchRun, parse_results_file
 from bench_plot_lib import (
     plot_grouped_bar_chart,
-    config_combinations,
     results_select,
 )
 
@@ -42,11 +39,6 @@ SERIES_COLORS = {
     "baseline": "steelblue",
     "bpf":      "forestgreen",
 }
-
-
-def has_access_field(results):
-    """Check if results have an 'access' config field."""
-    return any("access" in r.config for r in results)
 
 
 def build_combined_results(results):
@@ -88,32 +80,6 @@ def build_combined_results(results):
         "missing_write": "Missing (write)",
         "wp":            "Write-Protect",
         "minor":         "Minor",
-    }
-
-    return combined, group_order, group_labels, group_labels_flat
-
-
-def build_legacy_results(results):
-    """Build results for old data without access field.
-
-    Injects a 'group' field matching fault_type.
-    """
-    combined = []
-    for r in results:
-        new_config = dict(r.config)
-        new_config["group"] = r.config.get("fault_type")
-        combined.append(BenchRun(new_config, r.results))
-
-    group_order = ["missing", "wp", "minor"]
-    group_labels = {
-        "missing": "Missing",
-        "wp":      "Write-\nProtect",
-        "minor":   "Minor",
-    }
-    group_labels_flat = {
-        "missing": "Missing",
-        "wp":      "Write-Protect",
-        "minor":   "Minor",
     }
 
     return combined, group_order, group_labels, group_labels_flat
@@ -161,12 +127,16 @@ def main():
 
     results = parse_results_file(args.input, BenchResults)
 
-    if has_access_field(results):
-        combined, group_order, group_labels, group_labels_flat = \
-            build_combined_results(results)
-    else:
-        combined, group_order, group_labels, group_labels_flat = \
-            build_legacy_results(results)
+    # The reused results file can accumulate runs with different page
+    # counts, which would get averaged together below.
+    num_pages = {r.config.get("num_pages") for r in results}
+    if len(num_pages) > 1:
+        print(f"warning: results mix multiple num_pages values "
+              f"({sorted(num_pages, key=str)}), averaging across them",
+              file=sys.stderr)
+
+    combined, group_order, group_labels, group_labels_flat = \
+        build_combined_results(results)
 
     print_latencies(combined, group_order, group_labels_flat)
 
