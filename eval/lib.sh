@@ -84,6 +84,13 @@ progress_init() {
 	_P_TICKER=""
 	_P_PREFIX="${EVAL_PROGRESS_PREFIX:-}"
 	mkdir -p "$(dirname "$_P_LOG")"
+	# Concurrent runs of the same script share a log, results store, and
+	# (for some experiments) VM artifacts; refuse rather than corrupt.
+	# The lock is tied to fd 9 and releases when the script exits.
+	exec 9> "$_P_LOG.lock"
+	if ! flock -n 9; then
+		die "another '$_P_NAME' run is already in progress"$'\n'"(close it first, or remove a stale $_P_LOG.lock)"
+	fi
 	: > "$_P_LOG"
 	_P_STATE=$(mktemp)
 	printf '0\n0\nstarting\n' > "$_P_STATE"
