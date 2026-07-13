@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
-#
 # Plot userfaultfd overhead as a two-lane (faulting thread / handler thread)
 # timeline with IPI arrows between them.
 #
 # Usage:
 #   ./plot_overhead.py                                          # defaults
-#   ./plot_overhead.py -i ../results/overhead.csv               # custom input
-#   ./plot_overhead.py -o ../figures/overhead_breakdown.pdf     # custom output
+#   ./plot_overhead.py -i ../../results/overhead.csv               # custom input
+#   ./plot_overhead.py -o ../../figures/overhead_breakdown.pdf     # custom output
 
 import argparse
 import csv
@@ -25,8 +23,8 @@ plt.rcParams["pdf.fonttype"] = 42
 plt.rcParams["ps.fonttype"] = 42
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_INPUT = os.path.join(SCRIPT_DIR, "../results/overhead.csv")
-DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "../figures/overhead_breakdown.pdf")
+DEFAULT_INPUT = os.path.join(SCRIPT_DIR, "../../results/overhead.csv")
+DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "../../figures/overhead_breakdown.pdf")
 
 
 def load_overhead_csv(path):
