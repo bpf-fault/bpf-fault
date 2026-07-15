@@ -30,11 +30,13 @@ DEFAULT_OUTDIR = os.path.join(SCRIPT_DIR, "../figures/snapshot_timeseries")
 # Paper panel letter per mode (Figure 8 layout)
 MODE_PANELS = {"full": "figure8a", "live": "figure8b", "live_bpf": "figure8c"}
 
+# Fixed latency axis top (ms), shared by all panels
+YLIM_LAT_MS = 450
+
 
 def plot_one_timeseries(run: dict, ts_rows: list[dict], mode: str,
                         out_path: str,
                         ylim_thr: float | None = None,
-                        ylim_lat: float | None = None,
                         log_latency: bool = False):
     """Draw one timeline in the bpf-fault-paper firecracker style:
 
@@ -45,7 +47,7 @@ def plot_one_timeseries(run: dict, ts_rows: list[dict], mode: str,
         the whole pause for full)
       - legend lower-left, large fonts, no title
 
-    ylim_thr / ylim_lat: shared upper limits (raw ops/s and ms) for
+    ylim_thr: shared upper throughput limit (raw ops/s) for
     consistent cross-plot comparison.
     """
     from matplotlib.lines import Line2D
@@ -96,8 +98,7 @@ def plot_one_timeseries(run: dict, ts_rows: list[dict], mode: str,
     if log_latency:
         ax_lat.set_yscale("log")
     else:
-        ax_lat.set_ylim(0, (ylim_lat * 1.1) if ylim_lat
-                        else max(max(p99), 50.0) * 1.15)
+        ax_lat.set_ylim(0, YLIM_LAT_MS)
     ax_lat.tick_params(labelsize=FONTSIZE)
 
     # Legend with proxy artists for the markers (lower-left).
@@ -144,7 +145,7 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
 
     # Shared y-axis limits across every plot, for cross-plot comparison.
-    ylim_thr, ylim_lat = _compute_global_limits(runs, results_dir)
+    ylim_thr, _ = _compute_global_limits(runs, results_dir)
 
     for mem in mem_sizes:
         for mode in MODE_ORDER:
@@ -174,7 +175,7 @@ def main():
                     args.outdir,
                     f"{MODE_PANELS[mode]}_{mem}mib_{mode}_iter{iteration}.pdf")
                 plot_one_timeseries(run, ts_rows, mode, out_path,
-                                    ylim_thr=ylim_thr, ylim_lat=ylim_lat,
+                                    ylim_thr=ylim_thr,
                                     log_latency=args.log_latency)
                 plotted += 1
 
