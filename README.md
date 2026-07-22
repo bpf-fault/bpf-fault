@@ -1,5 +1,7 @@
 # bpf_fault: Customizable Page Fault Handling with eBPF
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21497066.svg)](https://doi.org/10.5281/zenodo.21497066)
+
 This repository contains source code and scripts for reproducing key results
 from the bpf_fault paper (SOSP 2026) for the purposes of artifact evaluation.
 
