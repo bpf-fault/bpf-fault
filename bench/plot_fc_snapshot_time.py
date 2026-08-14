@@ -97,7 +97,8 @@ def main():
     # legends clear the bars.
     top = max(max(v) for d in (downtime, total) for v in d.values()) * 1.45
     _plot_bars(downtime, "Downtime (s)",
-               os.path.join(args.out_dir, args.output_downtime), top)
+               os.path.join(args.out_dir, args.output_downtime), top,
+               yticks=[2, 4, 6, 8])
     _plot_bars(total, "Time (s)",
                os.path.join(args.out_dir, args.output_total), top,
                yticks=[2, 4, 6, 8])
