@@ -48,6 +48,27 @@ _WORKLOAD_MAP = [
     ("Memcached", "snapshot_benchmark_memcached_heavy.json"),
 ]
 
+# --- paper mode ------------------------------------------------------
+#
+# Element sizes taken verbatim from the Figure 9 PDFs currently in the
+# paper (read out of them: 34pt ylabel, 28pt y ticks, 26pt x ticks, 24pt
+# legend, on a 12x6in canvas). Specifying every element at the original's
+# physical scale means LaTeX scales type and strokes together, so a
+# regenerated figure drops into the same \includegraphics width and looks
+# identical apart from the data. Do not adjust one of these alone to fix
+# how the figure looks after scaling -- change the include width instead.
+PAPER_FIGSIZE          = (12, 6)
+PAPER_XTICK_FONTSIZE   = 26
+PAPER_YTICK_FONTSIZE   = 28
+PAPER_LABEL_FONTSIZE   = 34
+PAPER_LEGEND_FONTSIZE  = 24
+
+# Axis tops with headroom for the legend. The legend is drawn inside the
+# axes, so without this it sits on top of the tallest bar (93.8K ops/s
+# and 94.9ms in the current data).
+PAPER_YLIM_THR_TOP     = 130_000
+PAPER_YLIM_LAT         = (0.5, 1000)
+
 # Bar series: (mode_key, display_label, color)
 _SERIES = [
     ("live",     "userfaultfd", "darkorange"),
@@ -84,7 +105,8 @@ def load_all_runs(results_dir: str, workload_map: list) -> list[dict]:
 
 def _plot_bars(all_runs: list[dict], groups: list, value_fn, ylabel: str,
                out_path: str, log_scale: bool = False,
-               kilo_ticks: bool = False, ylim_top: float = None):
+               kilo_ticks: bool = False, ylim_top: float = None,
+               ylim: tuple = None, paper: bool = False):
     """Two bars (userfaultfd / bpf_fault) per (workload, mem) group.
 
     value_fn extracts the metric from a run's results dict; values are
@@ -93,7 +115,12 @@ def _plot_bars(all_runs: list[dict], groups: list, value_fn, ylabel: str,
     x = np.arange(len(groups))
     width = 0.35
 
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    fs_xtick  = PAPER_XTICK_FONTSIZE  if paper else FONTSIZE
+    fs_ytick  = PAPER_YTICK_FONTSIZE  if paper else FONTSIZE
+    fs_label  = PAPER_LABEL_FONTSIZE  if paper else LABEL_FONTSIZE
+    fs_legend = PAPER_LEGEND_FONTSIZE if paper else LEGEND_FONTSIZE
+
+    fig, ax = plt.subplots(figsize=PAPER_FIGSIZE if paper else (8, 4.5))
 
     for si, (mode_key, mode_label, color) in enumerate(_SERIES):
         means = []
@@ -115,17 +142,19 @@ def _plot_bars(all_runs: list[dict], groups: list, value_fn, ylabel: str,
 
     ax.set_xticks(x)
     ax.set_xticklabels([f"{wl}\n{mem_label(mem)}" for wl, mem in groups],
-                       fontsize=FONTSIZE)
-    ax.tick_params(axis="y", labelsize=FONTSIZE)
-    ax.set_ylabel(ylabel, fontsize=LABEL_FONTSIZE)
+                       fontsize=fs_xtick)
+    ax.tick_params(axis="y", labelsize=fs_ytick)
+    ax.set_ylabel(ylabel, fontsize=fs_label)
     if log_scale:
         ax.set_yscale("log")
+        if ylim:
+            ax.set_ylim(*ylim)
     else:
         ax.set_ylim(bottom=0, top=ylim_top)
     if kilo_ticks:
         ax.yaxis.set_major_formatter(
             FuncFormatter(lambda v, _: f"{v / 1000:.0f}K"))
-    ax.legend(fontsize=LEGEND_FONTSIZE, loc="best")
+    ax.legend(fontsize=fs_legend, loc="best")
     ax.grid(False)
     fig.tight_layout()
 
@@ -133,7 +162,7 @@ def _plot_bars(all_runs: list[dict], groups: list, value_fn, ylabel: str,
 
 
 def generate(results_dir: str, out_dir: str, output_throughput: str,
-             output_latency: str, fc_mems: list[int]):
+             output_latency: str, fc_mems: list[int], paper: bool = False):
     """Produce the Figure 9 throughput and latency charts."""
     all_runs = load_all_runs(results_dir, _WORKLOAD_MAP)
     print(f"Loaded {len(all_runs)} runs total")
@@ -153,7 +182,8 @@ def generate(results_dir: str, out_dir: str, output_throughput: str,
         ylabel="Throughput (ops/s)",
         out_path=os.path.join(out_dir, output_throughput),
         kilo_ticks=True,
-        ylim_top=100_000,
+        ylim_top=PAPER_YLIM_THR_TOP if paper else 100_000,
+        paper=paper,
     )
 
     print("\nPlotting latency chart...")
@@ -163,6 +193,8 @@ def generate(results_dir: str, out_dir: str, output_throughput: str,
         ylabel="Latency (ms)",
         out_path=os.path.join(out_dir, output_latency),
         log_scale=True,
+        ylim=PAPER_YLIM_LAT if paper else None,
+        paper=paper,
     )
 
 
@@ -185,10 +217,13 @@ def main():
                     help="Throughput figure filename (relative to --out-dir)")
     ap.add_argument("--output-latency", default="snapshot_latency.pdf",
                     help="Latency figure filename (relative to --out-dir)")
+    ap.add_argument("--paper", action="store_true",
+                    help="Paper mode: match the element sizes of the "
+                         "figures already in the paper")
     args = ap.parse_args()
 
     generate(args.results_dir, args.out_dir, args.output_throughput,
-             args.output_latency, args.fc_mems)
+             args.output_latency, args.fc_mems, paper=args.paper)
     print("\nDone.")
 
 
