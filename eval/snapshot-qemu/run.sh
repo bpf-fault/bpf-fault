@@ -21,7 +21,7 @@ fi
 #            memcached_heavy
 WORKLOADS="${WORKLOADS:-redis_heavy memcached_heavy}"
 ITERATIONS="${ITERATIONS:-3}"
-MEM_SIZES="${MEM_SIZES:-4096 8192}"
+MEM_SIZES="${MEM_SIZES:-8192 16384}"
 # full migrate live live_bpf; the migrate baseline runs up to its 120s
 # non-convergence timeout per configuration under write-heavy load.
 MODES="${MODES:-full migrate live live_bpf}"

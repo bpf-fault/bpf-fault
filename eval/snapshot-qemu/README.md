@@ -27,9 +27,9 @@ Requires `install_memtier.sh`, `install_firecracker.sh` (guest artifacts), and
 ## Usage
 
 ```sh
-./run.sh    # redis_heavy + memcached_heavy, 4 modes, 3 iterations, 4/8 GiB
+./run.sh    # redis_heavy + memcached_heavy, 4 modes, 3 iterations, 8/16 GiB
 ./plot.sh   # figure9{a,b}_qemu.pdf (FC + QEMU side by side) + timelines
 ```
 
-Expected runtime: 45 minutes (the `migrate` mode spends its full 120 s
+Expected runtime: 90 minutes (the `migrate` mode spends its full 120 s
 timeout in every write-heavy configuration).
