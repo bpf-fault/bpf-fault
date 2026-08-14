@@ -22,7 +22,13 @@ if [[ ! -e "$FIG8_JSON" ]]; then
 	die "No snapshot results at $FIG8_JSON"
 fi
 
-progress_init "snapshot plots" 2 "$RESULTS_PATH/logs/plot-snapshot.log"
+progress_init "snapshot plots" 3 "$RESULTS_PATH/logs/plot-snapshot.log"
+
+# Figure 6: snapshot downtime and total time, synchronous vs uffd
+progress_step "figure6a, figure6b"
+quiet python3 "$BASE_DIR/bench/plot_fc_snapshot_time.py" \
+	-r "$RESULTS_PATH" -w "$FIG8_WORKLOAD" \
+	--out-dir "$FIGURES_PATH"
 
 # Figure 8: Redis throughput and tail latency while taking a snapshot
 progress_step "figure8 panel candidates ($FIG8_WORKLOAD, ${FIG8_MEM} MiB, per iteration)"
@@ -39,4 +45,4 @@ quiet python3 "$BASE_DIR/bench/plot_snapshot_throughput.py" \
 	--output-throughput figure9a.pdf \
 	--output-latency figure9b.pdf
 
-progress_done "figures: figure9a.pdf, figure9b.pdf, figure8 candidates in snapshot_timeseries_$FIG8_WORKLOAD/"
+progress_done "figures: figure6a.pdf, figure6b.pdf, figure9a.pdf, figure9b.pdf, figure8 candidates in snapshot_timeseries_$FIG8_WORKLOAD/"
