@@ -9,7 +9,7 @@ We use a CloudLab instance of type c6525-25g running Ubuntu 24.04, with a
 maxed out temporary disk (`/mydata`). KVM access is required for the
 Firecracker experiments.
 
-There are five major components, included as submodules:
+There are six major components, included as submodules:
 
 - A modified Linux kernel based on Linux v6.17 that supports `bpf_fault`. This
   also includes supporting changes to libbpf and bpftool, and fault-handling
@@ -19,6 +19,8 @@ There are five major components, included as submodules:
 - bpf-dynlink: deferred ELF relative relocations via BPF page-fault handling,
   including a patched glibc 2.41 dynamic linker.
 - Firecracker with live snapshot support via userfaultfd and `bpf_fault`.
+- QEMU with `bpf_fault`-based background snapshot support
+  (`x-bpf-fault-snapshot`), alongside the upstream userfaultfd path.
 - memtier_benchmark with a `--stats-interval` flag for fine-grained
   throughput/latency timeseries during snapshots.
 
@@ -32,7 +34,8 @@ bpf-fault
 |   |-- scalability/        : Fault-handling scalability experiment
 |   |-- efency/             : efency allocator benchmarks
 |   |-- dynlink/            : Dynamic linking benchmarks
-|   \-- snapshot/           : Firecracker snapshot experiment
+|   |-- snapshot/           : Firecracker snapshot experiment
+|   \-- snapshot-qemu/      : QEMU snapshot experiment
 \-- install_*.sh            : Component installation and build scripts
 ```
 
@@ -74,12 +77,15 @@ cd /mydata/bpf-fault
 ./install_dynlink.sh
 ./install_memtier.sh
 ./install_firecracker.sh
+./install_qemu.sh
 ```
 
 `install_firecracker.sh` downloads the Amazon-provided Firecracker CI guest
 kernel and Ubuntu rootfs images from S3 and builds the application rootfs on top
 of them. Note that `install_memtier.sh` must run before
-`install_firecracker.sh`, which depends on the installed `memtier_benchmark`.
+`install_firecracker.sh`, which depends on the installed `memtier_benchmark`,
+and `install_qemu.sh` must run after `install_firecracker.sh`, whose guest
+kernel and rootfs images it reuses.
 
 ## Running Experiments
 

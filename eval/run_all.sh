@@ -11,7 +11,7 @@ BASE_DIR=$(realpath "$EVAL_DIR/..")
 . "$EVAL_DIR/lib.sh"
 
 # Ordered by expected runtime, shortest first
-EXPERIMENTS="fault-latency scalability efency snapshot dynlink"
+EXPERIMENTS="fault-latency scalability efency snapshot snapshot-qemu dynlink"
 set -- $EXPERIMENTS
 TOTAL=$(($# * 2))
 

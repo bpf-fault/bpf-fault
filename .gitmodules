@@ -13,3 +13,6 @@
 [submodule "bpf-dynlink"]
 	path = bpf-dynlink
 	url = https://github.com/bpf-fault/bpf-dynlink.git
+[submodule "qemu"]
+	path = qemu
+	url = https://github.com/bpf-fault/qemu.git

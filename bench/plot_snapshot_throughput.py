@@ -42,11 +42,28 @@ _RESULTS_DIR = os.path.join(_BENCH_DIR, "../results")
 _OUT_DIR = _RESULTS_DIR
 _FC_MEMS = [4096, 8192]
 
-# (display_label, fc_json_filename)
-_WORKLOAD_MAP = [
+# (display_label, json_filename) per VMM. Labels stay unprefixed when a
+# single VMM is plotted (the existing Figure 9); --vmm both prefixes
+# them so the eight groups are distinguishable.
+_FC_WORKLOAD_MAP = [
     ("Redis", "snapshot_benchmark_redis_heavy.json"),
     ("Memcached", "snapshot_benchmark_memcached_heavy.json"),
 ]
+_QEMU_WORKLOAD_MAP = [
+    ("Redis", "snapshot_benchmark_qemu_redis_heavy.json"),
+    ("Memcached", "snapshot_benchmark_qemu_memcached_heavy.json"),
+]
+
+
+def _workload_map(vmm):
+    if vmm == "fc":
+        return _FC_WORKLOAD_MAP
+    if vmm == "qemu":
+        return _QEMU_WORKLOAD_MAP
+    return (
+        [(f"FC {wl}", f) for wl, f in _FC_WORKLOAD_MAP]
+        + [(f"QEMU {wl}", f) for wl, f in _QEMU_WORKLOAD_MAP]
+    )
 
 # --- paper mode ------------------------------------------------------
 #
@@ -162,13 +179,15 @@ def _plot_bars(all_runs: list[dict], groups: list, value_fn, ylabel: str,
 
 
 def generate(results_dir: str, out_dir: str, output_throughput: str,
-             output_latency: str, fc_mems: list[int], paper: bool = False):
+             output_latency: str, fc_mems: list[int], paper: bool = False,
+             vmm: str = "fc"):
     """Produce the Figure 9 throughput and latency charts."""
-    all_runs = load_all_runs(results_dir, _WORKLOAD_MAP)
+    workload_map = _workload_map(vmm)
+    all_runs = load_all_runs(results_dir, workload_map)
     print(f"Loaded {len(all_runs)} runs total")
 
     groups = [(wl_label, mem)
-              for wl_label, _ in _WORKLOAD_MAP
+              for wl_label, _ in workload_map
               for mem in fc_mems]
 
     os.makedirs(out_dir, exist_ok=True)
@@ -220,10 +239,13 @@ def main():
     ap.add_argument("--paper", action="store_true",
                     help="Paper mode: match the element sizes of the "
                          "figures already in the paper")
+    ap.add_argument("--vmm", choices=["fc", "qemu", "both"], default="fc",
+                    help="Which hypervisor's snapshot results to plot")
     args = ap.parse_args()
 
     generate(args.results_dir, args.out_dir, args.output_throughput,
-             args.output_latency, args.fc_mems, paper=args.paper)
+             args.output_latency, args.fc_mems, paper=args.paper,
+             vmm=args.vmm)
     print("\nDone.")
 
 
