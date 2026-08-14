@@ -60,6 +60,9 @@ def main():
         key = (c.get("fault_type", ""), c.get("mode", ""))
         groups[key].append(r.results)
 
+    def mean(entries, stat):
+        return sum(e["latency_ns"][stat] for e in entries) / len(entries)
+
     # Collect data rows
     rows = []
     for ft in FAULT_ORDER:
@@ -68,14 +71,14 @@ def main():
         if not uffd_entries or not bpf_entries:
             continue
 
-        n_u = len(uffd_entries)
-        n_b = len(bpf_entries)
-        uffd_avg = sum(e["latency_ns"]["avg"] for e in uffd_entries) / n_u
-        uffd_p99 = sum(e["latency_ns"]["p99"] for e in uffd_entries) / n_u
-        bpf_avg = sum(e["latency_ns"]["avg"] for e in bpf_entries) / n_b
-        bpf_p99 = sum(e["latency_ns"]["p99"] for e in bpf_entries) / n_b
-        speedup_avg = uffd_avg / bpf_avg
-        speedup_p99 = uffd_p99 / bpf_p99
+        # bench_fault_wp has no baseline mode: there is no uninstrumented
+        # equivalent of a WP fault, so that cell stays empty.
+        base_entries = groups.get((ft, "baseline"), [])
+
+        uffd_avg = mean(uffd_entries, "avg")
+        uffd_p99 = mean(uffd_entries, "p99")
+        bpf_avg = mean(bpf_entries, "avg")
+        bpf_p99 = mean(bpf_entries, "p99")
 
         rows.append({
             "label": FAULT_LABELS[ft],
@@ -83,37 +86,52 @@ def main():
             "uffd_p99": uffd_p99,
             "bpf_avg": bpf_avg,
             "bpf_p99": bpf_p99,
-            "speedup_avg": speedup_avg,
-            "speedup_p99": speedup_p99,
+            "base_avg": mean(base_entries, "avg") if base_entries else None,
+            "base_p99": mean(base_entries, "p99") if base_entries else None,
+            "speedup_avg": uffd_avg / bpf_avg,
+            "speedup_p99": uffd_p99 / bpf_p99,
         })
 
     # Print plain-text summary to stderr
     hdr = (f"{'Fault Type':<18s} {'uffd avg':>10s} {'uffd p99':>10s}"
            f" {'bpf avg':>10s} {'bpf p99':>10s}"
+           f" {'base avg':>10s} {'base p99':>10s}"
            f" {'Avg x':>7s} {'p99 x':>7s}")
     print(hdr, file=sys.stderr)
     print("─" * len(hdr), file=sys.stderr)
     for r in rows:
+        base_avg = f"{r['base_avg']:,.0f}" if r["base_avg"] else "n/a"
+        base_p99 = f"{r['base_p99']:,.0f}" if r["base_p99"] else "n/a"
         print(f"{r['label']:<18s} {r['uffd_avg']:>10,.0f} {r['uffd_p99']:>10,.0f}"
               f" {r['bpf_avg']:>10,.0f} {r['bpf_p99']:>10,.0f}"
+              f" {base_avg:>10s} {base_p99:>10s}"
               f" {r['speedup_avg']:>6.1f}x {r['speedup_p99']:>6.1f}x",
               file=sys.stderr)
 
     # Generate LaTeX
+    def cell(value_ns, width):
+        if value_ns is None:
+            return f"{'--':>{width}s}"
+        return f"{value_ns/1000:>{width}.1f}"
+
     lines = []
     lines.append(r"\begin{table}[t]")
     lines.append(r"\centering")
     lines.append(r"\footnotesize")
-    lines.append(r"\begin{tabular}{l rr rr}")
+    lines.append(r"\begin{tabular}{l rr rr rr}")
     lines.append(r"\toprule")
-    lines.append(r" & \multicolumn{2}{c}{\uffd} & \multicolumn{2}{c}{\name} \\")
-    lines.append(r"\cmidrule(lr){2-3} \cmidrule(lr){4-5}")
-    lines.append(r"\textbf{Fault type} & \textbf{Avg} & \textbf{p99} & \textbf{Avg} & \textbf{p99} \\")
+    lines.append(r" & \multicolumn{2}{c}{\uffd} & \multicolumn{2}{c}{\name}"
+                 r" & \multicolumn{2}{c}{Baseline} \\")
+    lines.append(r"\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}")
+    lines.append(r"\textbf{Fault type} & \textbf{Avg} & \textbf{p99}"
+                 r" & \textbf{Avg} & \textbf{p99}"
+                 r" & \textbf{Avg} & \textbf{p99} \\")
     lines.append(r"\midrule")
     for r in rows:
         lines.append(
             f"{r['label']:<18s} & {r['uffd_avg']/1000:>4.1f} & {r['uffd_p99']/1000:>4.1f}"
-            f" & {r['bpf_avg']/1000:>3.1f} & {r['bpf_p99']/1000:>3.1f} \\\\"
+            f" & {r['bpf_avg']/1000:>3.1f} & {r['bpf_p99']/1000:>3.1f}"
+            f" & {cell(r['base_avg'], 3)} & {cell(r['base_p99'], 3)} \\\\"
         )
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")

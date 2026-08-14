@@ -18,9 +18,10 @@ PAGES="${PAGES:-1024}"
 
 mkdir -p "$RESULTS_PATH"
 
-# One step per configuration: 14 (fault type, mode, access) combinations
-# per iteration, plus the build.
-progress_init "fault-latency" $((1 + 14 * ITERATIONS)) \
+# One step per configuration: 17 (fault type, mode, access) combinations
+# per iteration, plus the build.  missing and minor run both read and
+# write access; wp is write-only.
+progress_init "fault-latency" $((1 + 17 * ITERATIONS)) \
 	"$RESULTS_PATH/logs/run-fault-latency.log"
 
 progress_step "building bench_fault"
