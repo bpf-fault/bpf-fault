@@ -49,7 +49,7 @@ def _mode_means(runs, key):
     return out
 
 
-def _plot_bars(data, ylabel, out_path, headroom=1.45, yticks=None):
+def _plot_bars(data, ylabel, out_path, ylim_top, yticks=None):
     x = range(len(_MEMS))
     width = 0.35
     fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -66,8 +66,7 @@ def _plot_bars(data, ylabel, out_path, headroom=1.45, yticks=None):
     else:
         ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_ylabel(ylabel, fontsize=LABEL_FONTSIZE)
-    # Headroom so the legend clears the tallest bar at this squat aspect.
-    ax.set_ylim(0, max(max(v) for v in data.values()) * headroom)
+    ax.set_ylim(0, ylim_top)
     ax.legend(fontsize=LEGEND_FONTSIZE, loc="upper left")
     fig.tight_layout()
     _savefig(fig, out_path)
@@ -92,12 +91,15 @@ def main():
     runs = load_runs(path)
 
     os.makedirs(args.out_dir, exist_ok=True)
-    # The downtime panel's tall bar sits under the legend; extra headroom.
-    _plot_bars(_mode_means(runs, "downtime_ms"), "Downtime (s)",
-               os.path.join(args.out_dir, args.output_downtime),
-               headroom=1.75)
-    _plot_bars(_mode_means(runs, "total_snapshot_ms"), "Time (s)",
-               os.path.join(args.out_dir, args.output_total),
+    downtime = _mode_means(runs, "downtime_ms")
+    total = _mode_means(runs, "total_snapshot_ms")
+    # One shared y limit across both panels, with headroom so the
+    # legends clear the bars.
+    top = max(max(v) for d in (downtime, total) for v in d.values()) * 1.45
+    _plot_bars(downtime, "Downtime (s)",
+               os.path.join(args.out_dir, args.output_downtime), top)
+    _plot_bars(total, "Time (s)",
+               os.path.join(args.out_dir, args.output_total), top,
                yticks=[2, 4, 6, 8])
 
 
