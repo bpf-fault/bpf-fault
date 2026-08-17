@@ -74,7 +74,7 @@ def _workload_map(vmm):
 # regenerated figure drops into the same \includegraphics width and looks
 # identical apart from the data. Do not adjust one of these alone to fix
 # how the figure looks after scaling -- change the include width instead.
-PAPER_FIGSIZE          = (8.2, 6)
+PAPER_FIGSIZE          = (8.2, 5)
 PAPER_XTICK_FONTSIZE   = 26
 PAPER_YTICK_FONTSIZE   = 28
 PAPER_LABEL_FONTSIZE   = 34
