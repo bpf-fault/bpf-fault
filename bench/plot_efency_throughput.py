@@ -203,7 +203,7 @@ def main():
         plot_figure(micro_combined, micro_group_order, MICRO_GROUP_LABELS,
                     series_order, args.output_micro, ylimit_top=200000,
                     legend_loc="upper left",
-                    fontsize=26, label_fontsize=32, legend_fontsize=22,
+                    fontsize=28, label_fontsize=32, legend_fontsize=22,
                     legend_ncol=2, legend_columnspacing=1.0)
 
     # --- Applications (no glibc/efence — just the three efency modes) ---
