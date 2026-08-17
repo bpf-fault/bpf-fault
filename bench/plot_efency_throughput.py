@@ -206,7 +206,7 @@ def main():
                     series_order, args.output_micro, ylimit_top=200000,
                     legend_loc="upper left",
                     fontsize=28, ytick_fontsize=32,
-                    label_fontsize=32, legend_fontsize=24,
+                    label_fontsize=32, legend_fontsize=23,
                     legend_ncol=2, legend_columnspacing=1.0)
 
     # --- Applications (no glibc/efence — just the three efency modes) ---
