@@ -47,11 +47,11 @@ _FC_MEMS = [4096, 8192]
 # them so the eight groups are distinguishable.
 _FC_WORKLOAD_MAP = [
     ("Redis", "snapshot_benchmark_redis_heavy.json"),
-    ("Memcached", "snapshot_benchmark_memcached_heavy.json"),
+    ("MC", "snapshot_benchmark_memcached_heavy.json"),
 ]
 _QEMU_WORKLOAD_MAP = [
     ("Redis", "snapshot_benchmark_qemu_redis_heavy.json"),
-    ("Memcached", "snapshot_benchmark_qemu_memcached_heavy.json"),
+    ("MC", "snapshot_benchmark_qemu_memcached_heavy.json"),
 ]
 
 
@@ -74,7 +74,7 @@ def _workload_map(vmm):
 # regenerated figure drops into the same \includegraphics width and looks
 # identical apart from the data. Do not adjust one of these alone to fix
 # how the figure looks after scaling -- change the include width instead.
-PAPER_FIGSIZE          = (12, 6)
+PAPER_FIGSIZE          = (8.2, 6)
 PAPER_XTICK_FONTSIZE   = 26
 PAPER_YTICK_FONTSIZE   = 28
 PAPER_LABEL_FONTSIZE   = 34
