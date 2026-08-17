@@ -438,6 +438,7 @@ def plot_grouped_bar_chart(
     title: str = "",
     figsize: Tuple[int, int] = (10, 6),
     fontsize: int = 16,
+    ytick_fontsize: int = None,
     label_fontsize: int = None,
     title_fontsize: int = None,
     legend_fontsize: int = None,
@@ -561,7 +562,7 @@ def plot_grouped_bar_chart(
     ax.set_xticks(x)
     ax.set_xticklabels([group_labels.get(g, g) for g in all_groups],
                        fontsize=fontsize)
-    ax.tick_params(axis="y", labelsize=fontsize)
+    ax.tick_params(axis="y", labelsize=ytick_fontsize or fontsize)
     ax.set_ylabel(y_label, fontsize=label_fontsize)
     if title:
         ax.set_title(title, fontsize=title_fontsize)
