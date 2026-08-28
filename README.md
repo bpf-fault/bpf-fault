@@ -129,8 +129,38 @@ directly. The `run_all.sh` script runs the plotting scripts as well.
 
 ## Citation
 
-If using bpf_fault, please include the following citation:
+If using bpf_fault, please cite the following papers:
 
 ```bibtex
-TODO
+@inproceedings{zussman2026bpffault,
+  author    = {Zussman, Tal and Dey, Riju and Zengin, Hasan and Fang, Yiming and Hildenbrand, David and Cidon, Asaf},
+  title     = {It's the Kernel's Fault! Custom Page Fault Handling With bpf\_fault},
+  year      = {2026},
+  isbn      = {9798400725852},
+  publisher = {Association for Computing Machinery},
+  address   = {New York, NY, USA},
+  url       = {https://doi.org/10.1145/3830418.38438},
+  doi       = {10.1145/3830418.38438},
+  booktitle = {Proceedings of the ACM SIGOPS 32nd Symposium on Operating Systems Principles},
+  numpages  = {17},
+  location  = {Prague, Czech Republic},
+  series    = {SOSP '26}
+}
+
+@inproceedings{zussman2024ebpf,
+  author    = {Zussman, Tal and Jiang, Teng and Cidon, Asaf},
+  title     = {Custom Page Fault Handling With {eBPF}},
+  year      = {2024},
+  isbn      = {9798400707124},
+  publisher = {Association for Computing Machinery},
+  address   = {New York, NY, USA},
+  url       = {https://doi.org/10.1145/3672197.3673432},
+  doi       = {10.1145/3672197.3673432},
+  booktitle = {Proceedings of the ACM SIGCOMM 2024 Workshop on eBPF and Kernel Extensions},
+  pages     = {71–73},
+  numpages  = {3},
+  keywords  = {Operating systems, eBPF, page faults},
+  location  = {Sydney, NSW, Australia},
+  series    = {eBPF '24}
+}
 ```
