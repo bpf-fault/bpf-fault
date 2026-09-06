@@ -16,3 +16,15 @@
 [submodule "qemu"]
 	path = qemu
 	url = https://github.com/bpf-fault/qemu.git
+[submodule "mmtk-core"]
+	path = mmtk-core
+	url = https://github.com/bpf-fault/mmtk-core.git
+[submodule "mmtk-openjdk"]
+	path = mmtk-openjdk
+	url = https://github.com/bpf-fault/mmtk-openjdk.git
+[submodule "gc-bpf-fault"]
+	path = gc-bpf-fault
+	url = https://github.com/bpf-fault/gc-bpf-fault.git
+[submodule "openjdk"]
+	path = openjdk
+	url = https://github.com/mmtk/openjdk.git
