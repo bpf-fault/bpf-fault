@@ -88,9 +88,12 @@ def main():
         for mem in MEMS:
             entries = groups.get((mode, mem), [])
             if not entries:
-                print(f"error: no records for mode={mode} mem={mem}",
+                # A narrowed run (MEM_SIZES) leaves a column empty; report
+                # it as missing rather than refusing to build the table.
+                print(f"warning: no records for mode={mode} mem={mem}",
                       file=sys.stderr)
-                sys.exit(1)
+                row["total"][mem] = None
+                continue
             n = len(entries)
             row["total"][mem] = sum(e["total_snapshot_ms"]
                                     for e in entries) / n
@@ -103,6 +106,9 @@ def main():
         rows.append(row)
 
     def span(vals):
+        vals = [v for v in vals if v is not None]
+        if not vals:
+            return "--"
         lo, hi = min(vals), max(vals)
         if fmt_ms(lo) == fmt_ms(hi):
             return fmt_ms(lo)
@@ -114,9 +120,11 @@ def main():
            f" {'downtime':>16s} {'worst lat':>16s}")
     print(hdr, file=sys.stderr)
     print("─" * len(hdr), file=sys.stderr)
+    def txt(v):
+        return f"{v:,.0f}ms" if v is not None else "--"
     for r in rows:
-        print(f"{r['label']:<24s} {r['total'][8192]:>8,.0f}ms"
-              f" {r['total'][16384]:>9,.0f}ms {span(r['down']):>16s}"
+        print(f"{r['label']:<24s} {txt(r['total'][8192]):>10s}"
+              f" {txt(r['total'][16384]):>11s} {span(r['down']):>16s}"
               f" {span(r['worst']) if r['worst'] else '--':>16s}",
               file=sys.stderr)
 
@@ -132,15 +140,17 @@ def main():
                  r" & \textbf{Downtime} & \textbf{Worst lat.} \\")
     lines.append(r"\midrule")
     for r in rows:
-        total8 = f"{r['total'][8192] / 1000:.2f}\\,s"
-        total16 = f"{r['total'][16384] / 1000:.2f}\\,s"
+        def tex(v):
+            return f"{v / 1000:.2f}\\,s" if v is not None else "--"
+        total8 = tex(r["total"][8192])
+        total16 = tex(r["total"][16384])
         worst = span(r["worst"]) if r["worst"] else "--"
         lines.append(f"{r['label']} & {total8} & {total16}"
                      f" & {span(r['down'])} & {worst} \\\\")
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
     lines.append(r"\caption{QEMU snapshot modes with Redis.}")
-    lines.append(r"\vspace{-1em}")
+    lines.append(r"\vspace{-3em}")
     lines.append(r"\label{tab:qemu-snapshots}")
     lines.append(r"\end{table}")
 

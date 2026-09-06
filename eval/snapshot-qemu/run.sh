@@ -1,6 +1,5 @@
 #!/bin/bash
-# QEMU snapshot run script (QEMU columns of Figure 9 and the snapshot
-# completion time discussion)
+# QEMU snapshot run script (Table 4)
 set -eu -o pipefail
 
 SCRIPT_PATH=$(realpath $0)
@@ -18,12 +17,12 @@ if [[ ! -x "$QEMU_PATH/build/qemu-system-x86_64" ]]; then
 fi
 
 # Workloads: redis_light redis_mixed redis_heavy memcached_light
-#            memcached_heavy
-WORKLOADS="${WORKLOADS:-redis_heavy memcached_heavy}"
+#            memcached_heavy. Table 4 reports redis_heavy.
+WORKLOADS="${WORKLOADS:-redis_heavy}"
 ITERATIONS="${ITERATIONS:-3}"
 MEM_SIZES="${MEM_SIZES:-8192 16384}"
-# full migrate live live_bpf; the migrate baseline runs up to its 120s
-# non-convergence timeout per configuration under write-heavy load.
+# The migrate baseline runs up to its 120s non-convergence timeout per
+# configuration under write-heavy load.
 MODES="${MODES:-full migrate live live_bpf}"
 
 mkdir -p "$BASE_DIR/results"
