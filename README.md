@@ -9,7 +9,7 @@ We use a CloudLab instance of type c6525-25g running Ubuntu 24.04, with a
 maxed out temporary disk (`/mydata`). KVM access is required for the
 Firecracker experiments.
 
-There are six major components, included as submodules:
+There are seven major components, included as submodules:
 
 - A modified Linux kernel based on Linux v6.17 that supports `bpf_fault`. This
   also includes supporting changes to libbpf and bpftool, and fault-handling
@@ -23,6 +23,9 @@ There are six major components, included as submodules:
   (`x-bpf-fault-snapshot`), alongside the upstream userfaultfd path.
 - memtier_benchmark with a `--stats-interval` flag for fine-grained
   throughput/latency timeseries during snapshots.
+- MMTk with `bpf_fault` dirty tracking and concurrent compaction, as
+  mmtk-core and the mmtk-openjdk binding, alongside the eBPF handlers and
+  loader in gc-bpf-fault.
 
 ## Repository Structure
 
@@ -35,7 +38,8 @@ bpf-fault
 |   |-- efency/             : efency allocator benchmarks
 |   |-- dynlink/            : Dynamic linking benchmarks
 |   |-- snapshot/           : Firecracker snapshot experiment
-|   \-- snapshot-qemu/      : QEMU snapshot experiment
+|   |-- snapshot-qemu/      : QEMU snapshot experiment
+|   \-- gc/                 : Garbage collection experiments
 \-- install_*.sh            : Component installation and build scripts
 ```
 
@@ -78,6 +82,7 @@ cd /mydata/bpf-fault
 ./install_memtier.sh
 ./install_firecracker.sh
 ./install_qemu.sh
+./install_gc.sh
 ```
 
 `install_firecracker.sh` downloads the Amazon-provided Firecracker CI guest
@@ -85,7 +90,9 @@ kernel and Ubuntu rootfs images from S3 and builds the application rootfs on top
 of them. Note that `install_memtier.sh` must run before
 `install_firecracker.sh`, which depends on the installed `memtier_benchmark`,
 and `install_qemu.sh` must run after `install_firecracker.sh`, whose guest
-kernel and rootfs images it reuses.
+kernel and rootfs images it reuses. `install_gc.sh` builds OpenJDK from
+source and downloads the DaCapo benchmark suite, which takes considerably
+longer than the other installers.
 
 ## Running Experiments
 
@@ -108,9 +115,10 @@ scripts accept an `ITERATIONS` environment variable to change this.
 
 Results are saved in the top-level `results/` directory.
 
-Running the experiments takes about an hour (see each experiment's README for
-estimates). We recommend using `screen` to run them in a persistent session that
-survives SSH disconnects. To detach from a `screen` session, press
+Running the experiments takes about six hours, most of it in the garbage
+collection experiment (see each experiment's README for estimates). We
+recommend using `screen` to run them in a persistent session that survives
+SSH disconnects. To detach from a `screen` session, press
 <kbd>Ctrl</kbd> + <kbd>A</kbd> followed by <kbd>Ctrl</kbd> + <kbd>D</kbd>.
 
 All run and plot scripts show a compact live progress display with the current
