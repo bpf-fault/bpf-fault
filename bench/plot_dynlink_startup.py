@@ -104,9 +104,9 @@ def main():
         sys.exit(1)
 
     app_labels = {
-        "Chrome": "Chrome\n(1.04M)",
-        "Clang":  "Clang\n(512K)",
-        "Deno":   "Deno\n(182K)",
+        "Chrome": "Chrome\n(1.08M)",
+        "Clang":  "Clang\n(502K)",
+        "Deno":   "Deno\n(180K)",
         "Docker": "Docker\n(120K)",
         "Node":   "Node\n(56K)",
     }

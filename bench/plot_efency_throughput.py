@@ -52,11 +52,11 @@ MICRO_GROUPS = [
     ("mt_no_touch", 64),
 ]
 MICRO_GROUP_LABELS = {
-    "seq_malloc_free_128":   "seq m/f\n(128B)",
-    "alloc_no_touch_128":    "no touch\n(128B)",
-    "speculative_10pct_64":  "specul.\n10%",
-    "speculative_50pct_64":  "specul.\n50%",
-    "speculative_100pct_64": "specul.\n100%",
+    "seq_malloc_free_128":   "seq\nm/f",
+    "alloc_no_touch_128":    "no\ntouch",
+    "speculative_10pct_64":  "spec.\n10%",
+    "speculative_50pct_64":  "spec.\n50%",
+    "speculative_100pct_64": "spec.\n100%",
     "mt_no_touch_64":        "mt no\ntouch",
 }
 
@@ -118,7 +118,8 @@ def print_table(title, groups, group_labels, combined, series_order):
 
 def plot_figure(combined, group_order, group_labels, series_order, output,
                 figsize=(10, 6), log_scale=True, hlines=None, ylimit_top=None,
-                legend_loc="best", fontsize=26, label_fontsize=32,
+                legend_loc="best", fontsize=26, ytick_fontsize=None,
+                label_fontsize=32,
                 legend_fontsize=24, legend_ncol=None,
                 legend_columnspacing=None):
     """Plot one normalized grouped bar chart."""
@@ -141,6 +142,7 @@ def plot_figure(combined, group_order, group_labels, series_order, output,
         series_colors=SERIES_COLORS,
         y_label="Overhead (× vs glibc)",
         fontsize=fontsize,
+        ytick_fontsize=ytick_fontsize,
         label_fontsize=label_fontsize,
         legend_fontsize=legend_fontsize,
         figsize=figsize,
@@ -203,7 +205,8 @@ def main():
         plot_figure(micro_combined, micro_group_order, MICRO_GROUP_LABELS,
                     series_order, args.output_micro, ylimit_top=200000,
                     legend_loc="upper left",
-                    fontsize=22, label_fontsize=32, legend_fontsize=22,
+                    fontsize=28, ytick_fontsize=32,
+                    label_fontsize=32, legend_fontsize=23,
                     legend_ncol=2, legend_columnspacing=1.0)
 
     # --- Applications (no glibc/efence — just the three efency modes) ---
